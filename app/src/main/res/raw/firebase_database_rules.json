@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "measurements": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["tailorId", "adminId", "timestamp"],
+      "$measurementId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "admin_codes": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'Admin'"
+    }
+  }
+} 

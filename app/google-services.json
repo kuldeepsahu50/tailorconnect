@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "358592522507",
+    "project_id": "admintailor-75fcd",
+    "storage_bucket": "admintailor-75fcd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:358592522507:android:25b6e67aad54a79b6c5a0e",
+        "android_client_info": {
+          "package_name": "com.example.tailorconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9Xa5701wEU1z-QPhERpDXQbigBJ5aKZo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

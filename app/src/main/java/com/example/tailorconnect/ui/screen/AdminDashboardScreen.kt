@@ -3,6 +3,14 @@ package com.example.tailorconnect.ui.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -10,73 +18,276 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.tailorconnect.data.model.Measurement
-import com.example.tailorconnect.data.model.User
+import com.example.tailorconnect.data.model.MeasurementFields
+import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.components.ProfileSection
-import com.example.tailorconnect.viewmodel.AdminViewModel
 import com.example.tailorconnect.viewmodel.ProfileViewModel
+import com.example.tailorconnect.viewmodel.TailorViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import android.util.Log
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.tailorconnect.data.repository.AppRepository
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.tooling.preview.Preview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminDashboardScreen(repository: AppRepository, userId: String, navController: NavController) {
-    Log.d("TailorConnect", "AdminDashboardScreen loaded with userId: $userId")
-    val adminViewModel = AdminViewModel(repository)
-    val profileViewModel = ProfileViewModel(repository)
-    var measurements by remember { mutableStateOf(listOf<Measurement>()) }
+fun AdminDashboardScreen(repository: AppRepository, adminId: String, navController: NavController) {
+    var selectedTab by remember { mutableStateOf(0) }
+    var selectedGender by remember { mutableStateOf("Male") }
+    var selectedGarmentType by remember { mutableStateOf("Shirt") }
     var customerName by remember { mutableStateOf("") }
-    var chest by remember { mutableStateOf("") }
-    var waist by remember { mutableStateOf("") }
-    var tailorId by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(true) }
+    var measurements by remember { mutableStateOf(mutableMapOf<String, String>()) }
+    var showDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-    var tailors by remember { mutableStateOf(listOf<User>()) }
-    val scope = rememberCoroutineScope()
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var isLoading by remember { mutableStateOf(false) }
+    var expandedGarmentType by remember { mutableStateOf(false) }
+    var allMeasurements by remember { mutableStateOf<List<Measurement>>(emptyList()) }
 
-    fun loadData() {
-        scope.launch {
-            try {
-                isLoading = true
-                errorMessage = null
-                successMessage = null
-                measurements = adminViewModel.getAllMeasurements()
-                // Load tailors for the dropdown
-                tailors = adminViewModel.getAllTailors()
-            } catch (e: Exception) {
-                errorMessage = "Failed to load data: ${e.message}"
-            } finally {
-                isLoading = false
-            }
+    val tailorViewModel = remember { TailorViewModel(repository) }
+    val tailors by tailorViewModel.tailors.collectAsState()
+    val profileViewModel = remember { ProfileViewModel(repository) }
+
+    // Load measurements
+    LaunchedEffect(Unit) {
+        try {
+            allMeasurements = repository.getAllMeasurements()
+        } catch (e: Exception) {
+            errorMessage = "Failed to load measurements: ${e.message}"
         }
     }
 
-    LaunchedEffect(Unit) {
-        loadData()
+    // Update garment types when gender changes
+    LaunchedEffect(selectedGender) {
+        val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
+        if (garmentTypes.isNotEmpty()) {
+            selectedGarmentType = garmentTypes[0]
+        }
+    }
+
+    // Update measurement fields when garment type changes
+    LaunchedEffect(selectedGarmentType) {
+        val fields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
+        measurements = fields.associateWith { "" }.toMutableMap()
     }
 
     Column {
         TabRow(selectedTabIndex = selectedTab) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Measurements") })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Submit") })
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Submit") })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Measurements") })
             Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Profile") })
         }
+
         when (selectedTab) {
             0 -> {
-                Column {
-                    // Add refresh button at the top
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Header
+                    Text(
+                        text = "New Measurement",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+
+                    // Customer Name Section
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        label = { Text("Customer Name") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        shape = MaterialTheme.shapes.medium
+                    )
+
+                    // Gender Selection Section
+                    Text(
+                        text = "Gender",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .selectable(
+                                    selected = selectedGender == "Male",
+                                    onClick = { selectedGender = "Male" }
+                                )
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedGender == "Male",
+                                onClick = { selectedGender = "Male" }
+                            )
+                            Text("Male", modifier = Modifier.padding(start = 8.dp))
+                        }
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .selectable(
+                                    selected = selectedGender == "Female",
+                                    onClick = { selectedGender = "Female" }
+                                )
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedGender == "Female",
+                                onClick = { selectedGender = "Female" }
+                            )
+                            Text("Female", modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+
+                    // Garment Type Section
+                    Text(
+                        text = "Garment Type",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
+                    ExposedDropdownMenuBox(
+                        expanded = expandedGarmentType,
+                        onExpandedChange = { expandedGarmentType = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedGarmentType,
+                            onValueChange = { },
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGarmentType) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            shape = MaterialTheme.shapes.medium
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedGarmentType,
+                            onDismissRequest = { expandedGarmentType = false }
+                        ) {
+                            garmentTypes.forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type) },
+                                    onClick = { 
+                                        selectedGarmentType = type
+                                        expandedGarmentType = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Measurements Section
+                    Text(
+                        text = "Measurements",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    val measurementFields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
+                    measurementFields.forEach { field ->
+                        OutlinedTextField(
+                            value = measurements[field] ?: "",
+                            onValueChange = { newValue ->
+                                measurements = measurements.toMutableMap().apply {
+                                    put(field, newValue)
+                                }
+                            },
+                            label = { Text(field) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            shape = MaterialTheme.shapes.medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Submit Button
+                    Button(
+                        onClick = {
+                            if (customerName.isBlank()) {
+                                errorMessage = "Please enter customer name"
+                                return@Button
+                            }
+                            if (measurements.values.any { it.isBlank() }) {
+                                errorMessage = "Please fill all measurements"
+                                return@Button
+                            }
+
+                            isLoading = true
+                            val measurement = Measurement(
+                                id = "",
+                                customerName = customerName,
+                                tailorId = "", // Empty tailor ID since we removed the selection
+                                adminId = adminId,
+                                timestamp = System.currentTimeMillis(),
+                                dimensions = measurements
+                            )
+
+                            // Submit measurement
+                            CoroutineScope(Dispatchers.Main).launch {
+                                try {
+                                    repository.addMeasurement(measurement)
+                                    showDialog = true
+                                    // Reset form
+                                    customerName = ""
+                                    measurements = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
+                                        .associateWith { "" }
+                                        .toMutableMap()
+                                    // Refresh measurements list
+                                    allMeasurements = repository.getAllMeasurements()
+                                } catch (e: Exception) {
+                                    errorMessage = "Failed to submit measurement: ${e.message}"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text(
+                                "Submit Measurement",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
+            }
+            1 -> {
+                // Measurements List
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -84,7 +295,15 @@ fun AdminDashboardScreen(repository: AppRepository, userId: String, navControlle
                             text = "All Measurements",
                             style = MaterialTheme.typography.titleLarge
                         )
-                        IconButton(onClick = { loadData() }) {
+                        IconButton(onClick = { 
+                            CoroutineScope(Dispatchers.Main).launch {
+                                try {
+                                    allMeasurements = repository.getAllMeasurements()
+                                } catch (e: Exception) {
+                                    errorMessage = "Failed to refresh measurements: ${e.message}"
+                                }
+                            }
+                        }) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Refresh"
@@ -92,206 +311,241 @@ fun AdminDashboardScreen(repository: AppRepository, userId: String, navControlle
                         }
                     }
 
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                        }
-                    } else if (errorMessage != null) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            Text(
-                                text = errorMessage ?: "Unknown error",
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    } else if (measurements.isEmpty()) {
+                    if (allMeasurements.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             Text(
                                 text = "No measurements available",
-                                modifier = Modifier.padding(16.dp)
+                                modifier = Modifier.align(Alignment.Center)
                             )
                         }
                     } else {
-                        LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            items(measurements) { measurement ->
+                        var expandedMeasurementId by remember { mutableStateOf<String?>(null) }
+                        var showDeleteDialog by remember { mutableStateOf<Measurement?>(null) }
+                        var showEditDialog by remember { mutableStateOf<Measurement?>(null) }
+                        
+                        LazyColumn {
+                            items(allMeasurements) { measurement ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(
-                                            text = "Customer: ${measurement.customerName}",
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Date: ${formatDate(measurement.timestamp)}")
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Chest: ${measurement.dimensions["chest"] ?: "N/A"}")
-                                        Text("Waist: ${measurement.dimensions["waist"] ?: "N/A"}")
-                                        Spacer(modifier = Modifier.height(8.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Button(
-                                                onClick = {
-                                                    scope.launch {
-                                                        try {
-                                                            adminViewModel.deleteMeasurement(measurement.id)
-                                                            loadData()
-                                                            successMessage = "Measurement deleted successfully"
-                                                        } catch (e: Exception) {
-                                                            errorMessage = "Failed to delete measurement: ${e.message}"
-                                                        }
+                                            Column(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { 
+                                                        expandedMeasurementId = if (expandedMeasurementId == measurement.id) null else measurement.id
                                                     }
-                                                }
                                             ) {
-                                                Text("Delete")
+                                                Text(
+                                                    text = measurement.customerName,
+                                                    style = MaterialTheme.typography.titleMedium
+                                                )
+                                                Text(
+                                                    text = formatDate(measurement.timestamp),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                             }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    customerName = measurement.customerName
-                                                    chest = measurement.dimensions["chest"] ?: ""
-                                                    waist = measurement.dimensions["waist"] ?: ""
-                                                    tailorId = measurement.tailorId
-                                                    selectedTab = 1
+                                            Row {
+                                                IconButton(onClick = { showEditDialog = measurement }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = "Edit"
+                                                    )
                                                 }
-                                            ) {
-                                                Text("Edit")
+                                                IconButton(onClick = { showDeleteDialog = measurement }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete"
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { 
+                                                        expandedMeasurementId = if (expandedMeasurementId == measurement.id) null else measurement.id
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (expandedMeasurementId == measurement.id) 
+                                                            Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                        contentDescription = if (expandedMeasurementId == measurement.id) 
+                                                            "Collapse" else "Expand"
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (expandedMeasurementId == measurement.id) {
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Divider()
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            
+                                            measurement.dimensions.forEach { (key, value) ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = key,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    Text(
+                                                        text = value,
+                                                        style = MaterialTheme.typography.bodyMedium
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-            }
-            1 -> {
-                Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    if (errorMessage != null) {
-                        Text(
-                            text = errorMessage ?: "Unknown error",
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-                    }
-                    if (successMessage != null) {
-                        Text(
-                            text = successMessage ?: "",
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-                    }
 
-                    OutlinedTextField(
-                        value = customerName,
-                        onValueChange = { customerName = it },
-                        label = { Text("Customer Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = chest,
-                        onValueChange = { chest = it },
-                        label = { Text("Chest") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = waist,
-                        onValueChange = { waist = it },
-                        label = { Text("Waist") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Tailor selection dropdown
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = tailors.find { it.id == tailorId }?.name ?: "Select Tailor",
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            tailors.forEach { tailor ->
-                                DropdownMenuItem(
-                                    text = { Text(tailor.name) },
-                                    onClick = {
-                                        tailorId = tailor.id
-                                        expanded = false
+                        // Delete Confirmation Dialog
+                        showDeleteDialog?.let { measurement ->
+                            AlertDialog(
+                                onDismissRequest = { showDeleteDialog = null },
+                                title = { Text("Delete Measurement") },
+                                text = { Text("Are you sure you want to delete this measurement?") },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                try {
+                                                    repository.deleteMeasurement(measurement.id)
+                                                    allMeasurements = repository.getAllMeasurements()
+                                                    showDeleteDialog = null
+                                                } catch (e: Exception) {
+                                                    errorMessage = "Failed to delete measurement: ${e.message}"
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text("Delete")
                                     }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            if (customerName.isBlank() || chest.isBlank() || waist.isBlank() || tailorId.isBlank()) {
-                                errorMessage = "Please fill in all fields"
-                                return@Button
-                            }
-                            scope.launch {
-                                try {
-                                    val measurement = Measurement(
-                                        customerName = customerName,
-                                        dimensions = mapOf("chest" to chest, "waist" to waist),
-                                        tailorId = tailorId,
-                                        adminId = userId,
-                                        timestamp = System.currentTimeMillis()
-                                    )
-                                    adminViewModel.addMeasurement(measurement)
-                                    loadData()
-                                    successMessage = "Measurement submitted successfully"
-                                    // Clear form
-                                    customerName = ""
-                                    chest = ""
-                                    waist = ""
-                                    tailorId = ""
-                                    selectedTab = 0
-                                } catch (e: Exception) {
-                                    errorMessage = "Failed to submit measurement: ${e.message}"
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDeleteDialog = null }) {
+                                        Text("Cancel")
+                                    }
                                 }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Submit")
+                            )
+                        }
+
+                        // Edit Dialog
+                        showEditDialog?.let { measurement ->
+                            var editedCustomerName by remember { mutableStateOf(measurement.customerName) }
+                            var editedMeasurements by remember { mutableStateOf(measurement.dimensions) }
+                            
+                            AlertDialog(
+                                onDismissRequest = { showEditDialog = null },
+                                title = { Text("Edit Measurement") },
+                                text = {
+                                    Column {
+                                        OutlinedTextField(
+                                            value = editedCustomerName,
+                                            onValueChange = { editedCustomerName = it },
+                                            label = { Text("Customer Name") },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        editedMeasurements.forEach { (key, value) ->
+                                            OutlinedTextField(
+                                                value = value,
+                                                onValueChange = { newValue ->
+                                                    editedMeasurements = editedMeasurements.toMutableMap().apply {
+                                                        put(key, newValue)
+                                                    }
+                                                },
+                                                label = { Text(key) },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                try {
+                                                    // Create updated measurement
+                                                    val updatedMeasurement = measurement.copy(
+                                                        customerName = editedCustomerName,
+                                                        dimensions = editedMeasurements
+                                                    )
+                                                    
+                                                    // Use editMeasurement instead of updateMeasurement
+                                                    repository.editMeasurement(updatedMeasurement)
+                                                    
+                                                    // Refresh the measurements list
+                                                    allMeasurements = repository.getAllMeasurements()
+                                                    showEditDialog = null
+                                                } catch (e: Exception) {
+                                                    errorMessage = "Failed to update measurement: ${e.message}"
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text("Save")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showEditDialog = null }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
             2 -> {
-                ProfileSection(profileViewModel, userId, navController)
+                ProfileSection(profileViewModel, adminId, navController)
             }
         }
+    }
+
+    // Error Dialog
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            title = { Text("Error") },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    // Success Dialog
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Success") },
+            text = { Text("Measurement submitted successfully") },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }
 
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
-}
-
-@Preview
-@Composable
-fun AdminDashboardScreenPreview() {
-    AdminDashboardScreen(repository = AppRepository(), userId = "admin_id", navController = NavController(LocalContext.current))
 }

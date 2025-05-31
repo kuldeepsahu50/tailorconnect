@@ -28,6 +28,7 @@ firebaseDatabase = "21.0.0"
 monitor = "1.7.2"
 junitKtx = "1.2.1"
 junitJunit = "4.12"
+firebaseFirestoreKtx = "25.1.4"
 
 [libraries]
 androidx-activity-compose-v182 = { module = "androidx.activity:activity-compose", version.ref = "activityComposeVersion" }
@@ -66,6 +67,7 @@ firebase-database = { group = "com.google.firebase", name = "firebase-database",
 androidx-monitor = { group = "androidx.test", name = "monitor", version.ref = "monitor" }
 androidx-junit-ktx = { group = "androidx.test.ext", name = "junit-ktx", version.ref = "junitKtx" }
 junit-junit = { group = "junit", name = "junit", version.ref = "junitJunit" }
+firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx", version.ref = "firebaseFirestoreKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version = "8.4.0" } # Or your current AGP version

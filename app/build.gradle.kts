@@ -61,6 +61,7 @@ dependencies {
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
     implementation(libs.androidx.monitor)
     implementation(libs.androidx.junit.ktx)
+    implementation(libs.firebase.firestore.ktx)
 
     // Mockito for mocking
     testImplementation("org.mockito:mockito-core:5.2.0")

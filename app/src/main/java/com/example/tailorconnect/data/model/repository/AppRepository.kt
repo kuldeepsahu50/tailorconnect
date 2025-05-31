@@ -1,4 +1,4 @@
-package com.example.tailorconnect.data.repository
+package com.example.tailorconnect.data.model.repository
 
 import android.app.Activity
 import android.util.Log
@@ -442,4 +442,4 @@ class AppRepository {
                 }
             })
     }
-}
+} 

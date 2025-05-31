@@ -3,11 +3,12 @@ package com.example.tailorconnect.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tailorconnect.data.model.Measurement
-import com.example.tailorconnect.data.repository.AppRepository
+import com.example.tailorconnect.data.model.repository.AppRepository
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.example.tailorconnect.data.model.User
 
 class TailorViewModel(private val repository: AppRepository) : ViewModel() {
     private val _measurements = MutableStateFlow<List<Measurement>>(emptyList())
@@ -18,6 +19,24 @@ class TailorViewModel(private val repository: AppRepository) : ViewModel() {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+
+    private val _tailors = MutableStateFlow<List<User>>(emptyList())
+    val tailors: StateFlow<List<User>> = _tailors
+
+    init {
+        loadTailors()
+    }
+
+    private fun loadTailors() {
+        viewModelScope.launch {
+            try {
+                val allUsers = repository.getAllUsers()
+                _tailors.value = allUsers.filter { it.role == "Tailor" }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
 
     fun loadMeasurements(tailorId: String) {
         viewModelScope.launch {

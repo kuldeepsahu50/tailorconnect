@@ -9,7 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.tailorconnect.data.repository.AppRepository
+import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.viewmodel.LoginViewModel
 import kotlinx.coroutines.launch
 

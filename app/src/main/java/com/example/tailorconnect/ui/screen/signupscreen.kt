@@ -6,12 +6,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.tailorconnect.data.repository.AppRepository
 import com.example.tailorconnect.viewmodel.SignupViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun SignupScreen(navController: NavController, repository: AppRepository) {
+fun SignupScreen(navController: NavController, repository: com.example.tailorconnect.data.model.repository.AppRepository) {
     val viewModel = SignupViewModel(repository)
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }

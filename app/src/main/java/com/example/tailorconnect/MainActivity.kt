@@ -12,18 +12,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.tailorconnect.data.repository.AppRepository
+import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.screen.AdminDashboardScreen
 import com.example.tailorconnect.ui.screen.LoginScreen
 import com.example.tailorconnect.ui.screen.SignupScreen
-import com.example.tailorconnect.ui.screens.TailorDashboardScreen
+import com.example.tailorconnect.ui.screen.TailorDashboardScreen
 import com.example.tailorconnect.util.FirebaseTestUtil
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val TAG = "TailorConnect"

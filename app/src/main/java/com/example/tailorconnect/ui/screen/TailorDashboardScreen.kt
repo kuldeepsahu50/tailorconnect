@@ -1,9 +1,11 @@
-package com.example.tailorconnect.ui.screens
+package com.example.tailorconnect.ui.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.tailorconnect.data.model.Measurement
-import com.example.tailorconnect.data.repository.AppRepository
+import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.components.ProfileSection
 import com.example.tailorconnect.viewmodel.ProfileViewModel
 import com.example.tailorconnect.viewmodel.TailorViewModel
@@ -22,6 +24,7 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +46,7 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
     val tailorViewModel = remember { TailorViewModel(repository) }
     val profileViewModel = remember { ProfileViewModel(repository) }
     var selectedTab by remember { mutableStateOf(0) }
+    var expandedMeasurementId by remember { mutableStateOf<String?>(null) }
 
     // Collect StateFlow values
     val measurements by tailorViewModel.measurements.collectAsState()
@@ -140,7 +144,10 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
+                                        .padding(vertical = 8.dp)
+                                        .clickable { 
+                                            expandedMeasurementId = if (expandedMeasurementId == measurement.id) null else measurement.id
+                                        },
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer
                                     )
@@ -151,36 +158,68 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = "Customer: ${measurement.customerName}",
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
-                                            Text(
-                                                text = "Admin Submitted",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary
+                                            Column {
+                                                Text(
+                                                    text = measurement.customerName,
+                                                    style = MaterialTheme.typography.titleMedium
+                                                )
+                                                Text(
+                                                    text = formatDate(measurement.timestamp),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = if (expandedMeasurementId == measurement.id) 
+                                                    Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = if (expandedMeasurementId == measurement.id) 
+                                                    "Collapse" else "Expand"
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Date: ${formatDate(measurement.timestamp)}")
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Chest: ${measurement.dimensions["chest"] ?: "N/A"}")
-                                        Text("Waist: ${measurement.dimensions["waist"] ?: "N/A"}")
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Button(
-                                            onClick = {
-                                                // Basic PDF generation (placeholder)
-                                                val file = File.createTempFile("measurement_${measurement.id}", ".txt")
-                                                FileWriter(file).use { writer ->
-                                                    writer.write("Customer: ${measurement.customerName}\n")
-                                                    writer.write("Date: ${formatDate(measurement.timestamp)}\n")
-                                                    writer.write("Chest: ${measurement.dimensions["chest"] ?: "N/A"}\n")
-                                                    writer.write("Waist: ${measurement.dimensions["waist"] ?: "N/A"}\n")
-                                                    writer.write("Submitted by: Admin\n")
+
+                                        if (expandedMeasurementId == measurement.id) {
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Divider()
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            
+                                            // Display all measurement fields
+                                            measurement.dimensions.forEach { (key, value) ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = key,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    Text(
+                                                        text = value,
+                                                        style = MaterialTheme.typography.bodyMedium
+                                                    )
                                                 }
                                             }
-                                        ) {
-                                            Text("Download PDF")
+
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Button(
+                                                onClick = {
+                                                    // Basic PDF generation (placeholder)
+                                                    val file = File.createTempFile("measurement_${measurement.id}", ".txt")
+                                                    FileWriter(file).use { writer ->
+                                                        writer.write("Customer: ${measurement.customerName}\n")
+                                                        writer.write("Date: ${formatDate(measurement.timestamp)}\n")
+                                                        measurement.dimensions.forEach { (key, value) ->
+                                                            writer.write("$key: $value\n")
+                                                        }
+                                                        writer.write("Submitted by: Admin\n")
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("Download PDF")
+                                            }
                                         }
                                     }
                                 }

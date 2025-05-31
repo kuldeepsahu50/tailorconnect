@@ -1,9 +1,13 @@
 package com.example.tailorconnect.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.tailorconnect.data.model.User
-import com.example.tailorconnect.data.repository.AppRepository
+import com.example.tailorconnect.data.model.repository.AppRepository
 import com.google.firebase.auth.PhoneAuthProvider
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class LoginViewModel(private val repository: AppRepository) : ViewModel() {
     suspend fun sendVerificationCode(phoneNumber: String, name: String, email: String): String {

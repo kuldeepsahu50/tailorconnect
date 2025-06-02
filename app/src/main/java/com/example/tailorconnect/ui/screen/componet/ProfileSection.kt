@@ -10,11 +10,19 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.tailorconnect.data.model.User
 import com.example.tailorconnect.viewmodel.ProfileViewModel
+import com.example.tailorconnect.ui.theme.ThemeState
 import kotlinx.coroutines.launch
 import android.util.Log
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 
 @Composable
-fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: NavController) {
+fun ProfileSection(
+    viewModel: ProfileViewModel,
+    userId: String,
+    navController: NavController,
+    themeState: ThemeState = remember { ThemeState() }
+) {
     Log.d("ProfileSection", "Loading profile for userId: $userId")
     var user by remember { mutableStateOf<User?>(null) }
     var name by remember { mutableStateOf("") }
@@ -65,7 +73,10 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = themeState.surfaceColor
+        )
     ) {
         Column(
             modifier = Modifier
@@ -73,15 +84,48 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Profile Information",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Profile Information",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = themeState.textColor
+                )
+                
+                // Theme Toggle Switch
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Theme Settings",
+                        tint = themeState.primaryColor
+                    )
+                    Switch(
+                        checked = themeState.isDarkTheme,
+                        onCheckedChange = { themeState.toggleTheme() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = themeState.primaryColor,
+                            checkedTrackColor = themeState.primaryColor.copy(alpha = 0.5f),
+                            uncheckedThumbColor = themeState.secondaryTextColor,
+                            uncheckedTrackColor = themeState.secondaryTextColor.copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
 
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(16.dp),
+                    color = themeState.primaryColor
+                )
             } else if (errorMessage != null) {
                 Text(
                     text = errorMessage ?: "Unknown error",
@@ -93,7 +137,10 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                         navController.navigate("login") {
                             popUpTo(navController.graph.startDestinationId) { inclusive = true }
                         }
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = themeState.primaryColor
+                    )
                 ) {
                     Text("Log In Again")
                 }
@@ -105,7 +152,13 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                         label = { Text("Name") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp)
+                            .padding(bottom = 8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = themeState.primaryColor,
+                            unfocusedBorderColor = themeState.secondaryTextColor,
+                            focusedLabelColor = themeState.primaryColor,
+                            unfocusedLabelColor = themeState.secondaryTextColor
+                        )
                     )
                     OutlinedTextField(
                         value = email,
@@ -113,7 +166,13 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                         label = { Text("Email") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp)
+                            .padding(bottom = 8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = themeState.primaryColor,
+                            unfocusedBorderColor = themeState.secondaryTextColor,
+                            focusedLabelColor = themeState.primaryColor,
+                            unfocusedLabelColor = themeState.secondaryTextColor
+                        )
                     )
                     OutlinedTextField(
                         value = phone,
@@ -121,7 +180,13 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                         label = { Text("Phone") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp)
+                            .padding(bottom = 16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = themeState.primaryColor,
+                            unfocusedBorderColor = themeState.secondaryTextColor,
+                            focusedLabelColor = themeState.primaryColor,
+                            unfocusedLabelColor = themeState.secondaryTextColor
+                        )
                     )
 
                     Row(
@@ -145,20 +210,26 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                                         errorMessage = "Failed to update: ${e.message}"
                                     }
                                 }
-                            }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = themeState.primaryColor
+                            )
                         ) {
                             Text("Save Changes")
                         }
                         OutlinedButton(
-                            onClick = { isEditing = false }
+                            onClick = { isEditing = false },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = themeState.primaryColor
+                            )
                         ) {
                             Text("Cancel")
                         }
                     }
                 } else {
-                    ProfileInfoItem("Name", name)
-                    ProfileInfoItem("Email", email)
-                    ProfileInfoItem("Phone", phone)
+                    ProfileInfoItem("Name", name, themeState)
+                    ProfileInfoItem("Email", email, themeState)
+                    ProfileInfoItem("Phone", phone, themeState)
 
                     Row(
                         modifier = Modifier
@@ -167,7 +238,10 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Button(
-                            onClick = { isEditing = true }
+                            onClick = { isEditing = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = themeState.primaryColor
+                            )
                         ) {
                             Text("Edit Profile")
                         }
@@ -176,21 +250,27 @@ fun ProfileSection(viewModel: ProfileViewModel, userId: String, navController: N
                                 navController.navigate("login") {
                                     popUpTo(0) { inclusive = true }
                                 }
-                            }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = themeState.primaryColor
+                            )
                         ) {
                             Text("Logout")
                         }
                     }
                 }
             } else {
-                Text("No profile information available")
+                Text(
+                    "No profile information available",
+                    color = themeState.textColor
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ProfileInfoItem(label: String, value: String) {
+private fun ProfileInfoItem(label: String, value: String, themeState: ThemeState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,12 +279,13 @@ private fun ProfileInfoItem(label: String, value: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = themeState.secondaryTextColor
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
+            color = themeState.textColor,
             modifier = Modifier.padding(top = 4.dp)
         )
     }

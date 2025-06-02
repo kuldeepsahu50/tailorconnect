@@ -18,9 +18,8 @@ import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.components.ProfileSection
 import com.example.tailorconnect.viewmodel.ProfileViewModel
 import com.example.tailorconnect.viewmodel.TailorViewModel
+import com.example.tailorconnect.ui.theme.ThemeState
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
@@ -47,6 +46,7 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
     val profileViewModel = remember { ProfileViewModel(repository) }
     var selectedTab by remember { mutableStateOf(0) }
     var expandedMeasurementId by remember { mutableStateOf<String?>(null) }
+    val themeState = remember { ThemeState() }
 
     // Collect StateFlow values
     val measurements by tailorViewModel.measurements.collectAsState()
@@ -77,148 +77,165 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
         tailorViewModel.loadMeasurements(tailorId)
     }
 
-    Column {
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Admin Measurements") })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Profile") })
-        }
-        when (selectedTab) {
-            0 -> {
-                Column {
-                    // Add refresh button at the top
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = themeState.backgroundColor
+    ) {
+        Column {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = themeState.surfaceColor,
+                contentColor = themeState.textColor
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { 
                         Text(
-                            text = "Admin Submitted Measurements",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        IconButton(onClick = { 
-                            Log.d("TailorDashboard", "Refresh button clicked")
-                            tailorViewModel.refreshMeasurements(tailorId)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh"
-                            )
-                        }
+                            "Admin Measurements",
+                            color = themeState.textColor
+                        ) 
                     }
-
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                        }
-                    } else if (error != null) {
-                        Box(modifier = Modifier.fillMaxSize()) {
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { 
+                        Text(
+                            "Profile",
+                            color = themeState.textColor
+                        ) 
+                    }
+                )
+            }
+            when (selectedTab) {
+                0 -> {
+                    Column {
+                        // Add refresh button at the top
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = error ?: "Unknown error",
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(16.dp)
+                                text = "Admin Submitted Measurements",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = themeState.textColor
                             )
-                        }
-                    } else if (measurements.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "No admin measurements available",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Check back later for new measurements",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            IconButton(onClick = { 
+                                Log.d("TailorDashboard", "Refresh button clicked")
+                                tailorViewModel.refreshMeasurements(tailorId)
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    tint = themeState.primaryColor
                                 )
                             }
                         }
-                    } else {
-                        LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            items(measurements) { measurement ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                        .clickable { 
-                                            expandedMeasurementId = if (expandedMeasurementId == measurement.id) null else measurement.id
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                    )
-                                ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column {
-                                                Text(
-                                                    text = measurement.customerName,
-                                                    style = MaterialTheme.typography.titleMedium
-                                                )
-                                                Text(
-                                                    text = formatDate(measurement.timestamp),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            Icon(
-                                                imageVector = if (expandedMeasurementId == measurement.id) 
-                                                    Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                contentDescription = if (expandedMeasurementId == measurement.id) 
-                                                    "Collapse" else "Expand"
-                                            )
-                                        }
 
-                                        if (expandedMeasurementId == measurement.id) {
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Divider()
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            
-                                            // Display all measurement fields
-                                            measurement.dimensions.forEach { (key, value) ->
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(vertical = 4.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
+                        if (isLoading) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    color = themeState.primaryColor
+                                )
+                            }
+                        } else if (error != null) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Text(
+                                    text = error ?: "Unknown error",
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else if (measurements.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "No admin measurements available",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = themeState.textColor
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Check back later for new measurements",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = themeState.secondaryTextColor
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                items(measurements) { measurement ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp)
+                                            .clickable { 
+                                                expandedMeasurementId = if (expandedMeasurementId == measurement.id) null else measurement.id
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = themeState.surfaceColor
+                                        )
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
                                                     Text(
-                                                        text = key,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        text = measurement.customerName,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = themeState.textColor
                                                     )
                                                     Text(
-                                                        text = value,
-                                                        style = MaterialTheme.typography.bodyMedium
+                                                        text = formatDate(measurement.timestamp),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = themeState.secondaryTextColor
                                                     )
                                                 }
+                                                Icon(
+                                                    imageVector = if (expandedMeasurementId == measurement.id) 
+                                                        Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = if (expandedMeasurementId == measurement.id) 
+                                                        "Collapse" else "Expand",
+                                                    tint = themeState.primaryColor
+                                                )
                                             }
 
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Button(
-                                                onClick = {
-                                                    // Basic PDF generation (placeholder)
-                                                    val file = File.createTempFile("measurement_${measurement.id}", ".txt")
-                                                    FileWriter(file).use { writer ->
-                                                        writer.write("Customer: ${measurement.customerName}\n")
-                                                        writer.write("Date: ${formatDate(measurement.timestamp)}\n")
-                                                        measurement.dimensions.forEach { (key, value) ->
-                                                            writer.write("$key: $value\n")
-                                                        }
-                                                        writer.write("Submitted by: Admin\n")
+                                            if (expandedMeasurementId == measurement.id) {
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                // Display all measurement fields
+                                                measurement.dimensions.forEach { (key, value) ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 4.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text(
+                                                            text = key,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = themeState.secondaryTextColor
+                                                        )
+                                                        Text(
+                                                            text = value,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = themeState.textColor
+                                                        )
                                                     }
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text("Download PDF")
+                                                }
                                             }
                                         }
                                     }
@@ -227,9 +244,9 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                         }
                     }
                 }
-            }
-            1 -> {
-                ProfileSection(profileViewModel, tailorId, navController)
+                1 -> {
+                    ProfileSection(profileViewModel, tailorId, navController, themeState)
+                }
             }
         }
     }

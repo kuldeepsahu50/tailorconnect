@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.tailorconnect"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.tailorconnect"
@@ -47,6 +47,8 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
@@ -55,6 +57,9 @@ dependencies {
     implementation("androidx.navigation:navigation-runtime-ktx:2.7.4")
     implementation("androidx.camera:camera-core:1.3.0")
     
+    // PDF Generation
+    implementation("com.itextpdf:itext7-core:7.2.5")
+    
     // Authentication - using versions compatible with compileSdk 34
     implementation("androidx.credentials:credentials:1.2.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.2.0")
@@ -62,6 +67,7 @@ dependencies {
     implementation(libs.androidx.monitor)
     implementation(libs.androidx.junit.ktx)
     implementation(libs.firebase.firestore.ktx)
+    implementation(libs.androidx.media3.exoplayer)
 
     // Mockito for mocking
     testImplementation("org.mockito:mockito-core:5.2.0")

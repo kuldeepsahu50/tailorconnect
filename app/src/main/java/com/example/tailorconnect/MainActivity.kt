@@ -4,8 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,6 +22,8 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import com.example.tailorconnect.ui.screen.SplashScreen
+import com.example.tailorconnect.ui.theme.TailorConnectTheme
 
 class MainActivity : ComponentActivity() {
     private val TAG = "TailorConnect"
@@ -43,7 +44,19 @@ class MainActivity : ComponentActivity() {
         repository.setActivity(this)
 
         setContent {
-            TailorConnectAppContent(repository)
+            var showSplash by remember { mutableStateOf(true) }
+
+            if (showSplash) {
+                SplashScreen(
+                    onSplashFinished = {
+                        showSplash = false
+                    }
+                )
+            } else {
+                TailorConnectTheme {
+                    TailorConnectAppContent(repository)
+                }
+            }
         }
     }
 

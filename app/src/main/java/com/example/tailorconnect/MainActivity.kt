@@ -47,14 +47,14 @@ class MainActivity : ComponentActivity() {
             var showSplash by remember { mutableStateOf(true) }
 
             if (showSplash) {
-                SplashScreen(
-                    onSplashFinished = {
-                        showSplash = false
-                    }
-                )
+                    SplashScreen(
+                        onSplashFinished = {
+                            showSplash = false
+                        }
+                    )
             } else {
                 TailorConnectTheme {
-                    TailorConnectAppContent(repository)
+                TailorConnectAppContent(repository)
                 }
             }
         }

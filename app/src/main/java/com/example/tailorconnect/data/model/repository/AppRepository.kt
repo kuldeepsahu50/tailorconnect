@@ -75,11 +75,25 @@ class AppRepository {
 
         val options = PhoneAuthOptions.newBuilder(auth)
             .setPhoneNumber(phoneNumber)
-            .setTimeout(60L, TimeUnit.SECONDS)
+            .setTimeout(30L, TimeUnit.SECONDS)
             .setActivity(getActivity())
             .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
                     // Auto-verification completed
+                    try {
+                        // Try to sign in immediately if auto-verification succeeds
+                        auth.signInWithCredential(credential)
+                            .addOnSuccessListener {
+                                storedVerificationId = null
+                                pendingUserInfo = null
+                                continuation.resume("auto_verified")
+                            }
+                            .addOnFailureListener {
+                                continuation.resumeWithException(it)
+                            }
+                    } catch (e: Exception) {
+                        continuation.resumeWithException(e)
+                    }
                 }
 
                 override fun onVerificationFailed(e: FirebaseException) {
@@ -108,6 +122,46 @@ class AppRepository {
             
             if (code.isBlank()) {
                 throw Exception("Verification code cannot be empty")
+            }
+
+            // Check if auto-verification was successful
+            if (verificationId == "auto_verified") {
+                val currentUser = auth.currentUser
+                if (currentUser != null) {
+                    // Check if user exists in database
+                    val userSnapshot = database.child("users")
+                        .child(currentUser.uid)
+                        .get()
+                        .await()
+
+                    val user = userSnapshot.getValue(User::class.java)
+
+                    if (user == null) {
+                        // Create new user if doesn't exist
+                        val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
+                        val newUser = User(
+                            id = currentUser.uid,
+                            role = role,
+                            phone = currentUser.phoneNumber ?: "",
+                            name = userInfo["name"] ?: "",
+                            email = userInfo["email"] ?: "",
+                            username = "",
+                            password = "",
+                            uniqueCode = ""
+                        )
+                        database.child("users").child(currentUser.uid).setValue(newUser).await()
+                        pendingUserInfo = null
+                        return newUser
+                    }
+
+                    // Verify role matches
+                    if (user.role != role) {
+                        auth.signOut()
+                        throw Exception("Invalid role selected")
+                    }
+
+                    return user
+                }
             }
 
             val credential = PhoneAuthProvider.getCredential(verificationId, code)

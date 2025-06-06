@@ -398,10 +398,11 @@ fun AdminDashboardScreen(
                             text = "Measurements",
                             style = MaterialTheme.typography.titleMedium,
                             color = themeState.textColor,
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
                         val measurementFields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
                         measurementFields.forEach { field ->
+                            val isOptional = field == "Message" || field == "Comment"
                             OutlinedTextField(
                                 value = measurements[field] ?: "",
                                 onValueChange = { newValue ->
@@ -409,7 +410,21 @@ fun AdminDashboardScreen(
                                         put(field, newValue)
                                     }
                                 },
-                                label = { Text(field, color = themeState.secondaryTextColor) },
+                                label = { 
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = field,
+                                            color = themeState.secondaryTextColor
+                                        )
+                                        if (isOptional) {
+                                            Text(
+                                                text = " (Optional)",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = themeState.secondaryTextColor.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 8.dp),
@@ -421,7 +436,10 @@ fun AdminDashboardScreen(
                                     cursorColor = themeState.primaryColor,
                                     focusedTextColor = themeState.textColor,
                                     unfocusedTextColor = themeState.textColor
-                                )
+                                ),
+                                placeholder = if (isOptional) {
+                                    { Text("Enter ${field.lowercase()} (optional)") }
+                                } else null
                             )
                         }
 
@@ -434,10 +452,6 @@ fun AdminDashboardScreen(
                                     errorMessage = "Please enter customer name"
                                     return@Button
                                 }
-                                if (measurements.values.any { it.isBlank() }) {
-                                    errorMessage = "Please fill all measurements"
-                                    return@Button
-                                }
 
                                 isLoading = true
                                 val measurement = Measurement(
@@ -446,7 +460,9 @@ fun AdminDashboardScreen(
                                     tailorId = "",
                                     adminId = adminId,
                                     timestamp = System.currentTimeMillis(),
-                                    dimensions = measurements
+                                    dimensions = measurements.toMutableMap().apply {
+                                        put("Garment Type", selectedGarmentType)
+                                    }
                                 )
 
                                 CoroutineScope(Dispatchers.Main).launch {
@@ -564,7 +580,7 @@ fun AdminDashboardScreen(
                                                         color = themeState.textColor
                                                     )
                                                     Text(
-                                                        text = formatDate(measurement.timestamp),
+                                                        text = "${measurement.dimensions["Garment Type"] ?: ""} • ${formatDate(measurement.timestamp)}",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = themeState.secondaryTextColor
                                                     )
@@ -694,7 +710,11 @@ fun AdminDashboardScreen(
                                     onDismissRequest = { showEditDialog = null },
                                     title = { Text("Edit Measurement", color = themeState.textColor) },
                                     text = {
-                                        Column {
+                                        Column(
+                                            modifier = Modifier
+                                                .verticalScroll(rememberScrollState())
+                                                .fillMaxWidth()
+                                        ) {
                                             OutlinedTextField(
                                                 value = editedCustomerName,
                                                 onValueChange = { editedCustomerName = it },
@@ -712,6 +732,7 @@ fun AdminDashboardScreen(
                                             )
                                             Spacer(modifier = Modifier.height(16.dp))
                                             editedMeasurements.forEach { (key, value) ->
+                                                val isOptional = key == "Message" || key == "Comment"
                                                 OutlinedTextField(
                                                     value = value,
                                                     onValueChange = { newValue ->
@@ -719,7 +740,21 @@ fun AdminDashboardScreen(
                                                             put(key, newValue)
                                                         }
                                                     },
-                                                    label = { Text(key, color = themeState.secondaryTextColor) },
+                                                    label = { 
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(
+                                                                text = key,
+                                                                color = themeState.secondaryTextColor
+                                                            )
+                                                            if (isOptional) {
+                                                                Text(
+                                                                    text = " (Optional)",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = themeState.secondaryTextColor.copy(alpha = 0.7f)
+                                                                )
+                                                            }
+                                                        }
+                                                    },
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(vertical = 4.dp),
@@ -731,7 +766,10 @@ fun AdminDashboardScreen(
                                                         cursorColor = themeState.primaryColor,
                                                         focusedTextColor = themeState.textColor,
                                                         unfocusedTextColor = themeState.textColor
-                                                    )
+                                                    ),
+                                                    placeholder = if (isOptional) {
+                                                        { Text("Enter ${key.lowercase()} (optional)") }
+                                                    } else null
                                                 )
                                             }
                                         }

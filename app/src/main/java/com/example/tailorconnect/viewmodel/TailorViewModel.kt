@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import com.example.tailorconnect.data.model.User
 
-class TailorViewModel(private val repository: AppRepository) : ViewModel() {
+class  TailorViewModel(private val repository: AppRepository) : ViewModel() {
     private val _measurements = MutableStateFlow<List<Measurement>>(emptyList())
     val measurements: StateFlow<List<Measurement>> = _measurements
 

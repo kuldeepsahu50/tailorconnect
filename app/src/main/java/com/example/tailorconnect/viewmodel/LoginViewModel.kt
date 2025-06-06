@@ -12,7 +12,13 @@ import kotlinx.coroutines.launch
 class LoginViewModel(private val repository: AppRepository) : ViewModel() {
     suspend fun sendVerificationCode(phoneNumber: String, name: String, email: String): String {
         try {
-            return repository.sendVerificationCode(phoneNumber, name, email)
+            // Add +91 prefix if not already present
+            val formattedPhoneNumber = if (phoneNumber.startsWith("+91")) {
+                phoneNumber
+            } else {
+                "+91$phoneNumber"
+            }
+            return repository.sendVerificationCode(formattedPhoneNumber, name, email)
         } catch (e: Exception) {
             throw Exception("Failed to send verification code: ${e.message}")
         }

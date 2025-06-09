@@ -7,11 +7,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.tailorconnect.data.model.Measurement
 import com.example.tailorconnect.data.model.repository.AppRepository
@@ -24,12 +29,44 @@ import java.text.SimpleDateFormat
 import java.util.*
 import android.util.Log
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.itextpdf.kernel.pdf.PdfDocument
+import com.itextpdf.kernel.pdf.PdfWriter
+import com.itextpdf.layout.Document
+import com.itextpdf.layout.element.Cell
+import com.itextpdf.layout.element.Paragraph
+import com.itextpdf.layout.element.Table
+import com.itextpdf.layout.properties.TextAlignment
+import com.itextpdf.layout.properties.UnitValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navController: NavController) {
     Log.d("TailorDashboard", "Loading dashboard for tailorId: $tailorId")
     
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    
+    // Calculate responsive dimensions
+    val screenWidth = configuration.screenWidthDp.dp
+    val isTablet = screenWidth >= 600.dp
+    
+    // Responsive spacing
+    val defaultPadding = if (isTablet) 24.dp else 16.dp
+    val smallPadding = if (isTablet) 16.dp else 8.dp
+    val largePadding = if (isTablet) 32.dp else 24.dp
+    
+    // Responsive font sizes
+    val titleSize = if (isTablet) 28.sp else 24.sp
+    val subtitleSize = if (isTablet) 20.sp else 16.sp
+    val bodySize = if (isTablet) 16.sp else 14.sp
+    val captionSize = if (isTablet) 14.sp else 12.sp
+    
+    // Responsive component sizes
+    val buttonHeight = if (isTablet) 64.dp else 56.dp
+    val iconSize = if (isTablet) 32.dp else 24.dp
+
     if (tailorId.isBlank()) {
         Log.e("TailorDashboard", "Invalid tailorId provided")
         Box(modifier = Modifier.fillMaxSize()) {
@@ -47,6 +84,79 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
     var selectedTab by remember { mutableStateOf(0) }
     var expandedMeasurementId by remember { mutableStateOf<String?>(null) }
     val themeState = remember { ThemeState() }
+    var selectedMeasurementForPdf by remember { mutableStateOf<Measurement?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    // PDF save launcher
+    val savePdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let { pdfUri ->
+            try {
+                selectedMeasurementForPdf?.let { measurement ->
+                    context.contentResolver.openOutputStream(pdfUri)?.use { outputStream ->
+                        PdfWriter(outputStream).use { writer ->
+                            val pdfDoc = PdfDocument(writer)
+                            Document(pdfDoc).use { document ->
+                                // Add title
+                                val title = Paragraph("Measurement Details")
+                                    .setTextAlignment(TextAlignment.CENTER)
+                                    .setFontSize(20f)
+                                    .setBold()
+                                document.add(title)
+                                
+                                // Add customer info
+                                document.add(Paragraph("\n"))
+                                document.add(Paragraph("Customer Name: ${measurement.customerName}")
+                                    .setFontSize(14f))
+                                document.add(Paragraph("Date: ${formatDate(measurement.timestamp)}")
+                                    .setFontSize(12f))
+                                document.add(Paragraph("\n"))
+                                
+                                // Add measurements table
+                                val table = Table(UnitValue.createPercentArray(2))
+                                    .useAllAvailableWidth()
+                                    .setMarginTop(20f)
+                                    .setMarginBottom(20f)
+                                
+                                // Add header
+                                val headerCell1 = Cell().add(Paragraph("Measurement")
+                                    .setBold()
+                                    .setFontSize(12f))
+                                val headerCell2 = Cell().add(Paragraph("Value")
+                                    .setBold()
+                                    .setFontSize(12f))
+                                table.addHeaderCell(headerCell1)
+                                table.addHeaderCell(headerCell2)
+                                
+                                // Add measurement data
+                                measurement.dimensions.forEach { (key, value) ->
+                                    table.addCell(Cell().add(Paragraph(key)
+                                        .setFontSize(10f)))
+                                    table.addCell(Cell().add(Paragraph(value)
+                                        .setFontSize(10f)))
+                                }
+                                
+                                document.add(table)
+                                
+                                // Add footer
+                                document.add(Paragraph("\n"))
+                                document.add(Paragraph("Generated by TailorConnect")
+                                    .setTextAlignment(TextAlignment.CENTER)
+                                    .setFontSize(10f)
+                                    .setItalic())
+                            }
+                        }
+                    }
+                } ?: run {
+                    errorMessage = "Measurement not found"
+                }
+            } catch (e: Exception) {
+                errorMessage = "Failed to save PDF: ${e.message}"
+            }
+        }
+    }
 
     // Collect StateFlow values
     val measurements by tailorViewModel.measurements.collectAsState()
@@ -93,7 +203,8 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                     text = { 
                         Text(
                             "Admin Measurements",
-                            color = themeState.textColor
+                            color = themeState.textColor,
+                            fontSize = captionSize
                         ) 
                     }
                 )
@@ -103,7 +214,8 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                     text = { 
                         Text(
                             "Profile",
-                            color = themeState.textColor
+                            color = themeState.textColor,
+                            fontSize = captionSize
                         ) 
                     }
                 )
@@ -236,6 +348,29 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                         )
                                                     }
                                                 }
+
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Button(
+                                                    onClick = {
+                                                        try {
+                                                            selectedMeasurementForPdf = measurement
+                                                            savePdfLauncher.launch("measurement_${measurement.customerName}.pdf")
+                                                        } catch (e: Exception) {
+                                                            errorMessage = "Failed to generate PDF: ${e.message}"
+                                                        }
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = themeState.primaryColor
+                                                    )
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.GetApp,
+                                                        contentDescription = "Download PDF",
+                                                        modifier = Modifier.padding(end = 8.dp)
+                                                    )
+                                                    Text("Download PDF")
+                                                }
                                             }
                                         }
                                     }
@@ -249,6 +384,21 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                 }
             }
         }
+    }
+
+    // Error Dialog
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { errorMessage = null },
+            title = { Text("Error", color = themeState.textColor) },
+            text = { Text(errorMessage!!, color = themeState.textColor) },
+            confirmButton = {
+                TextButton(onClick = { errorMessage = null }) {
+                    Text("OK", color = themeState.primaryColor)
+                }
+            },
+            containerColor = themeState.surfaceColor
+        )
     }
 }
 

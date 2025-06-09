@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(navController: NavController, repository: AppRepository) {
     val viewModel = LoginViewModel(repository)
+
     var phoneNumber by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -270,8 +271,13 @@ private fun RoleButton(
         modifier = Modifier
             .width(120.dp)
             .height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
     ) {
-        Text(text)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White
+        )
     }
 }
 

@@ -34,6 +34,7 @@ import com.example.tailorconnect.data.model.MeasurementFields
 import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.components.ProfileSection
 import com.example.tailorconnect.utils.PdfGenerator
+import com.example.tailorconnect.utils.CsvGenerator
 import com.example.tailorconnect.viewmodel.ProfileViewModel
 import com.example.tailorconnect.viewmodel.TailorViewModel
 import com.example.tailorconnect.ui.theme.ThemeState
@@ -102,6 +103,7 @@ fun AdminDashboardScreen(
 
     val context = LocalContext.current
     val pdfGenerator = remember { PdfGenerator(context) }
+    val csvGenerator = remember { CsvGenerator(context) }
     
     // PDF save launcher
     val savePdfLauncher = rememberLauncherForActivityResult(
@@ -174,6 +176,26 @@ fun AdminDashboardScreen(
         }
     }
 
+    // CSV save launcher
+    val saveCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let { csvUri ->
+            try {
+                selectedMeasurementForPdf?.let { measurement ->
+                    context.contentResolver.openOutputStream(csvUri)?.use { outputStream ->
+                        val csvContent = csvGenerator.generateCsvContent(measurement)
+                        outputStream.write(csvContent.toByteArray())
+                    }
+                } ?: run {
+                    errorMessage = "Measurement not found"
+                }
+            } catch (e: Exception) {
+                errorMessage = "Failed to save CSV: ${e.message}"
+            }
+        }
+    }
+
     // Load measurements
     LaunchedEffect(Unit) {
         try {
@@ -214,7 +236,7 @@ fun AdminDashboardScreen(
                         Text(
                             "Submit",
                             color = themeState.textColor,
-                            fontSize = bodySize
+                            fontSize = captionSize
                         ) 
                     }
                 )
@@ -225,7 +247,7 @@ fun AdminDashboardScreen(
                         Text(
                             "Measurements",
                             color = themeState.textColor,
-                            fontSize = bodySize
+                            fontSize = captionSize
                         ) 
                     }
                 )
@@ -236,7 +258,7 @@ fun AdminDashboardScreen(
                         Text(
                             "Profile",
                             color = themeState.textColor,
-                            fontSize = bodySize
+                            fontSize = captionSize
                         ) 
                     }
                 )
@@ -642,6 +664,10 @@ fun AdminDashboardScreen(
                                                 }
 
                                                 Spacer(modifier = Modifier.height(16.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
                                                 Button(
                                                     onClick = {
                                                         try {
@@ -651,7 +677,7 @@ fun AdminDashboardScreen(
                                                             errorMessage = "Failed to generate PDF: ${e.message}"
                                                         }
                                                     },
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                        modifier = Modifier.weight(1f),
                                                     colors = ButtonDefaults.buttonColors(
                                                         containerColor = themeState.primaryColor
                                                     )
@@ -661,7 +687,30 @@ fun AdminDashboardScreen(
                                                         contentDescription = "Download PDF",
                                                         modifier = Modifier.padding(end = 8.dp)
                                                     )
-                                                    Text("Download PDF")
+                                                        Text("PDF")
+                                                    }
+                                                    
+                                                    Button(
+                                                        onClick = {
+                                                            try {
+                                                                selectedMeasurementForPdf = measurement
+                                                                saveCsvLauncher.launch("measurement_${measurement.customerName}.csv")
+                                                            } catch (e: Exception) {
+                                                                errorMessage = "Failed to generate CSV: ${e.message}"
+                                                            }
+                                                        },
+                                                        modifier = Modifier.weight(1f),
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = themeState.primaryColor
+                                                        )
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.FileDownload,
+                                                            contentDescription = "Download CSV",
+                                                            modifier = Modifier.padding(end = 8.dp)
+                                                        )
+                                                        Text("CSV")
+                                                    }
                                                 }
                                             }
                                         }

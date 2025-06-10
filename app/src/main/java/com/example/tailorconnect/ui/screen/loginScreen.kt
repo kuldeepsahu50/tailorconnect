@@ -1,5 +1,6 @@
 package com.example.tailorconnect.ui.screen
 
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
@@ -34,7 +35,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(navController: NavController, repository: AppRepository) {
     val viewModel = LoginViewModel(repository)
-
     var phoneNumber by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -197,13 +197,16 @@ fun LoginScreen(navController: NavController, repository: AppRepository) {
                                                 errorMessage = ""
                                                 val user = viewModel.verifyCode(verificationCode, selectedRole!!)
                                                 if (user != null) {
+                                                    Log.d("LoginScreen", "Verification successful for user: ${user.id}")
                                                     navController.navigate("admin_dashboard/${user.id}") {
                                                         popUpTo(navController.graph.startDestinationId) { inclusive = true }
                                                     }
                                                 } else {
+                                                    Log.e("LoginScreen", "Verification failed: User is null")
                                                     errorMessage = "Invalid verification code"
                                                 }
                                             } catch (e: Exception) {
+                                                Log.e("LoginScreen", "Verification error: ${e.message}")
                                                 errorMessage = "Verification failed: ${e.message}"
                                             } finally {
                                                 isLoading = false
@@ -271,13 +274,8 @@ private fun RoleButton(
         modifier = Modifier
             .width(120.dp)
             .height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White
-        )
+        Text(text)
     }
 }
 

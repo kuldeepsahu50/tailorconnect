@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,10 +26,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.tailorconnect.R
 import com.example.tailorconnect.data.model.Measurement
 import com.example.tailorconnect.data.model.MeasurementFields
 import com.example.tailorconnect.data.model.repository.AppRepository
@@ -54,6 +58,15 @@ import com.itextpdf.layout.element.Paragraph
 import com.itextpdf.layout.element.Table
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +76,21 @@ fun AdminDashboardScreen(
     navController: NavController,
     themeState: ThemeState = remember { ThemeState() }
 ) {
+    // Add validation for adminId
+    if (adminId.isBlank()) {
+        Log.e("AdminDashboard", "Invalid adminId provided")
+        Box(modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = "Error: Invalid admin ID",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+        return
+    }
+
+    Log.d("AdminDashboard", "Loading dashboard for adminId: $adminId")
+    
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     
@@ -96,6 +124,7 @@ fun AdminDashboardScreen(
     var expandedGarmentType by remember { mutableStateOf(false) }
     var allMeasurements by remember { mutableStateOf<List<Measurement>>(emptyList()) }
     var selectedMeasurementForPdf by remember { mutableStateOf<Measurement?>(null) }
+    var selectedBodyType by remember { mutableStateOf<Int?>(null) }
 
     val tailorViewModel = remember { TailorViewModel(repository) }
     val tailors by tailorViewModel.tailors.collectAsState()
@@ -266,129 +295,39 @@ fun AdminDashboardScreen(
 
             when (selectedTab) {
                 0 -> {
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(defaultPadding)
-                            .verticalScroll(rememberScrollState())
                     ) {
                         // Header
-                        Text(
-                            text = "New Measurement",
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontSize = titleSize,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = themeState.textColor,
-                            modifier = Modifier.padding(bottom = largePadding)
-                        )
-
-                        // Customer Name Section
-                        OutlinedTextField(
-                            value = customerName,
-                            onValueChange = { customerName = it },
-                            label = { 
-                                Text(
-                                    "Customer Name",
-                                    color = themeState.secondaryTextColor,
-                                    fontSize = bodySize
-                                ) 
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = defaultPadding),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = themeState.primaryColor,
-                                unfocusedBorderColor = themeState.secondaryTextColor,
-                                focusedLabelColor = themeState.primaryColor,
-                                unfocusedLabelColor = themeState.secondaryTextColor,
-                                cursorColor = themeState.primaryColor,
-                                focusedTextColor = themeState.textColor,
-                                unfocusedTextColor = themeState.textColor
-                            ),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = bodySize
+                        item {
+                            Text(
+                                text = "New Measurement",
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontSize = titleSize,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = themeState.textColor,
+                                modifier = Modifier.padding(bottom = largePadding)
                             )
-                        )
-
-                        // Gender Selection Section
-                        Text(
-                            text = "Gender",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = themeState.textColor,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .selectable(
-                                        selected = selectedGender == "Male",
-                                        onClick = { selectedGender = "Male" }
-                                    )
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selectedGender == "Male",
-                                    onClick = { selectedGender = "Male" },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = themeState.primaryColor,
-                                        unselectedColor = themeState.secondaryTextColor
-                                    )
-                                )
-                                Text("Male", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .selectable(
-                                        selected = selectedGender == "Female",
-                                        onClick = { selectedGender = "Female" }
-                                    )
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selectedGender == "Female",
-                                    onClick = { selectedGender = "Female" },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = themeState.primaryColor,
-                                        unselectedColor = themeState.secondaryTextColor
-                                    )
-                                )
-                                Text("Female", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
-                            }
                         }
 
-                        // Garment Type Section
-                        Text(
-                            text = "Garment Type",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = themeState.textColor,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
-                        ExposedDropdownMenuBox(
-                            expanded = expandedGarmentType,
-                            onExpandedChange = { expandedGarmentType = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp)
-                        ) {
+                        // Customer Name Section
+                        item {
                             OutlinedTextField(
-                                value = selectedGarmentType,
-                                onValueChange = { },
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGarmentType) },
+                                value = customerName,
+                                onValueChange = { customerName = it },
+                                label = { 
+                                    Text(
+                                        "Customer Name",
+                                        color = themeState.secondaryTextColor,
+                                        fontSize = bodySize
+                                    ) 
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .padding(bottom = defaultPadding),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = themeState.primaryColor,
                                     unfocusedBorderColor = themeState.secondaryTextColor,
@@ -397,33 +336,223 @@ fun AdminDashboardScreen(
                                     cursorColor = themeState.primaryColor,
                                     focusedTextColor = themeState.textColor,
                                     unfocusedTextColor = themeState.textColor
+                                ),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = bodySize
                                 )
                             )
-                            ExposedDropdownMenu(
-                                expanded = expandedGarmentType,
-                                onDismissRequest = { expandedGarmentType = false }
+                        }
+
+                        // Gender Selection Section
+                        item {
+                            Text(
+                                text = "Gender",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = themeState.textColor,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                garmentTypes.forEach { type ->
-                                    DropdownMenuItem(
-                                        text = { Text(type, color = themeState.textColor) },
-                                        onClick = { 
-                                            selectedGarmentType = type
-                                            expandedGarmentType = false
-                                        }
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .selectable(
+                                            selected = selectedGender == "Male",
+                                            onClick = { selectedGender = "Male" }
+                                        )
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedGender == "Male",
+                                        onClick = { selectedGender = "Male" },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = themeState.primaryColor,
+                                            unselectedColor = themeState.secondaryTextColor
+                                        )
                                     )
+                                    Text("Male", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .selectable(
+                                            selected = selectedGender == "Female",
+                                            onClick = { selectedGender = "Female" }
+                                        )
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedGender == "Female",
+                                        onClick = { selectedGender = "Female" },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = themeState.primaryColor,
+                                            unselectedColor = themeState.secondaryTextColor
+                                        )
+                                    )
+                                    Text("Female", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
+                                }
+                            }
+                        }
+
+                        // Garment Type Section
+                        item {
+                            Text(
+                                text = "Garment Type",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = themeState.textColor,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        item {
+                            val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
+                            ExposedDropdownMenuBox(
+                                expanded = expandedGarmentType,
+                                onExpandedChange = { expandedGarmentType = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedGarmentType,
+                                    onValueChange = { },
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGarmentType) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = themeState.primaryColor,
+                                        unfocusedBorderColor = themeState.secondaryTextColor,
+                                        focusedLabelColor = themeState.primaryColor,
+                                        unfocusedLabelColor = themeState.secondaryTextColor,
+                                        cursorColor = themeState.primaryColor,
+                                        focusedTextColor = themeState.textColor,
+                                        unfocusedTextColor = themeState.textColor
+                                    )
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedGarmentType,
+                                    onDismissRequest = { expandedGarmentType = false }
+                                ) {
+                                    garmentTypes.forEach { type ->
+                                        DropdownMenuItem(
+                                            text = { Text(type, color = themeState.textColor) },
+                                            onClick = { 
+                                                selectedGarmentType = type
+                                                expandedGarmentType = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Body Type Selection Section
+                        item {
+                            var isBodyTypeExpanded by remember { mutableStateOf(false) }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isBodyTypeExpanded = !isBodyTypeExpanded }
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Select Body Type",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = themeState.textColor
+                                )
+                                Icon(
+                                    imageVector = if (isBodyTypeExpanded) 
+                                        Icons.Default.KeyboardArrowUp 
+                                    else 
+                                        Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (isBodyTypeExpanded) "Collapse" else "Expand",
+                                    tint = themeState.primaryColor
+                                )
+                            }
+                            
+                            AnimatedVisibility(
+                                visible = isBodyTypeExpanded,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(2),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(400.dp)
+                                        .padding(bottom = 24.dp)
+                                ) {
+                                    items((1..6).toList()) { bodyType ->
+                                        BodyTypeCard(
+                                            bodyType = bodyType,
+                                            isSelected = selectedBodyType == bodyType,
+                                            onClick = { 
+                                                selectedBodyType = bodyType
+                                                isBodyTypeExpanded = false
+                                            },
+                                            themeState = themeState
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Show selected body type when collapsed
+                            if (!isBodyTypeExpanded && selectedBodyType != null) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 24.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = themeState.primaryColor.copy(alpha = 0.1f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Selected Body Type: $selectedBodyType",
+                                            color = themeState.textColor
+                                        )
+                                        IconButton(onClick = { isBodyTypeExpanded = true }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Change Body Type",
+                                                tint = themeState.primaryColor
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
 
                         // Measurements Section
-                        Text(
-                            text = "Measurements",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = themeState.textColor,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
+                        item {
+                            Text(
+                                text = "Measurements",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = themeState.textColor,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
                         val measurementFields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
-                        measurementFields.forEach { field ->
+                        items(measurementFields) { field ->
                             val isOptional = field == "Message" || field == "Comment"
                             OutlinedTextField(
                                 value = measurements[field] ?: "",
@@ -465,62 +594,70 @@ fun AdminDashboardScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
                         // Submit Button
-                        Button(
-                            onClick = {
-                                if (customerName.isBlank()) {
-                                    errorMessage = "Please enter customer name"
-                                    return@Button
-                                }
-
-                                isLoading = true
-                                val measurement = Measurement(
-                                    id = "",
-                                    customerName = customerName,
-                                    tailorId = "",
-                                    adminId = adminId,
-                                    timestamp = System.currentTimeMillis(),
-                                    dimensions = measurements.toMutableMap().apply {
-                                        put("Garment Type", selectedGarmentType)
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    if (customerName.isBlank()) {
+                                        errorMessage = "Please enter customer name"
+                                        return@Button
                                     }
-                                )
-
-                                CoroutineScope(Dispatchers.Main).launch {
-                                    try {
-                                        repository.addMeasurement(measurement)
-                                        showDialog = true
-                                        customerName = ""
-                                        measurements = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
-                                            .associateWith { "" }
-                                            .toMutableMap()
-                                        allMeasurements = repository.getAllMeasurements()
-                                    } catch (e: Exception) {
-                                        errorMessage = "Failed to submit measurement: ${e.message}"
-                                    } finally {
-                                        isLoading = false
+                                    if (selectedBodyType == null) {
+                                        errorMessage = "Please select a body type"
+                                        return@Button
                                     }
+
+                                    isLoading = true
+                                    val measurement = Measurement(
+                                        id = "",
+                                        customerName = customerName,
+                                        tailorId = "",
+                                        adminId = adminId,
+                                        timestamp = System.currentTimeMillis(),
+                                        bodyTypeImageId = selectedBodyType,
+                                        dimensions = measurements.toMutableMap().apply {
+                                            put("Garment Type", selectedGarmentType)
+                                            put("Body Type", "Type $selectedBodyType")
+                                        }
+                                    )
+
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        try {
+                                            repository.addMeasurement(measurement)
+                                            showDialog = true
+                                            customerName = ""
+                                            measurements = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
+                                                .associateWith { "" }
+                                                .toMutableMap()
+                                            allMeasurements = repository.getAllMeasurements()
+                                        } catch (e: Exception) {
+                                            errorMessage = "Failed to submit measurement: ${e.message}"
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = themeState.primaryColor
+                                )
+                            ) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                } else {
+                                    Text(
+                                        "Submit",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
                                 }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = themeState.primaryColor
-                            )
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Text(
-                                    "Submit Measurement",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
                             }
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }
@@ -642,6 +779,45 @@ fun AdminDashboardScreen(
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 Divider(color = themeState.secondaryTextColor.copy(alpha = 0.2f))
                                                 Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                // Display body type image if available
+                                                measurement.bodyTypeImageId?.let { bodyTypeId ->
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier.padding(16.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Text(
+                                                                text = "Body Type",
+                                                                style = MaterialTheme.typography.titleMedium,
+                                                                color = themeState.textColor,
+                                                                modifier = Modifier.padding(bottom = 8.dp)
+                                                            )
+                                                            Image(
+                                                                painter = painterResource(id = when (bodyTypeId) {
+                                                                    1 -> R.drawable.first
+                                                                    2 -> R.drawable.second
+                                                                    3 -> R.drawable.third
+                                                                    4 -> R.drawable.fourth
+                                                                    5 -> R.drawable.five
+                                                                    else -> R.drawable.sixth
+                                                                }),
+                                                                contentDescription = "Body Type $bodyTypeId",
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .height(200.dp)
+                                                                    .padding(8.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                                 
                                                 measurement.dimensions.forEach { (key, value) ->
                                                     Row(
@@ -896,4 +1072,56 @@ fun AdminDashboardScreen(
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+@Composable
+private fun BodyTypeCard(
+    bodyType: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    themeState: ThemeState
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.75f)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) 
+                themeState.primaryColor.copy(alpha = 0.1f)
+            else 
+                themeState.surfaceColor
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(id = when (bodyType) {
+                    1 -> R.drawable.first
+                    2 -> R.drawable.second
+                    3 -> R.drawable.third
+                    4 -> R.drawable.fourth
+                    5 -> R.drawable.five
+                    else -> R.drawable.sixth
+                }),
+                contentDescription = "Body Type $bodyType",
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            )
+            
+            Text(
+                text = "Body Type $bodyType",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = if (isSelected) themeState.primaryColor else themeState.textColor,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
 }

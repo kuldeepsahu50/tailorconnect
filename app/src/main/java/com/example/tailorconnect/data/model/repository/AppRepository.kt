@@ -118,6 +118,7 @@ class AppRepository {
 
     suspend fun verifyCode(code: String, role: String): User? {
         try {
+            Log.d("AppRepository", "Starting verification process for role: $role")
             val verificationId = storedVerificationId ?: throw Exception("Verification ID is missing. Please request a new code.")
             
             if (code.isBlank()) {
@@ -126,8 +127,10 @@ class AppRepository {
 
             // Check if auto-verification was successful
             if (verificationId == "auto_verified") {
+                Log.d("AppRepository", "Auto-verification detected")
                 val currentUser = auth.currentUser
                 if (currentUser != null) {
+                    Log.d("AppRepository", "Current user found: ${currentUser.uid}")
                     // Check if user exists in database
                     val userSnapshot = database.child("users")
                         .child(currentUser.uid)
@@ -137,6 +140,7 @@ class AppRepository {
                     val user = userSnapshot.getValue(User::class.java)
 
                     if (user == null) {
+                        Log.d("AppRepository", "Creating new user for auto-verified account")
                         // Create new user if doesn't exist
                         val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
                         val newUser = User(
@@ -151,23 +155,28 @@ class AppRepository {
                         )
                         database.child("users").child(currentUser.uid).setValue(newUser).await()
                         pendingUserInfo = null
+                        Log.d("AppRepository", "New user created successfully")
                         return newUser
                     }
 
                     // Verify role matches
                     if (user.role != role) {
+                        Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
                         auth.signOut()
                         throw Exception("Invalid role selected")
                     }
 
+                    Log.d("AppRepository", "Existing user verified successfully")
                     return user
                 }
             }
 
+            Log.d("AppRepository", "Manual verification with code")
             val credential = PhoneAuthProvider.getCredential(verificationId, code)
             val authResult = auth.signInWithCredential(credential).await()
             val firebaseUser = authResult.user ?: throw Exception("Authentication failed")
 
+            Log.d("AppRepository", "Firebase authentication successful for user: ${firebaseUser.uid}")
             // Check if user exists in database
             val userSnapshot = database.child("users")
                 .child(firebaseUser.uid)
@@ -177,6 +186,7 @@ class AppRepository {
             val user = userSnapshot.getValue(User::class.java)
 
             if (user == null) {
+                Log.d("AppRepository", "Creating new user for manually verified account")
                 // Create new user if doesn't exist
                 val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
                 val newUser = User(
@@ -191,17 +201,21 @@ class AppRepository {
                 )
                 database.child("users").child(firebaseUser.uid).setValue(newUser).await()
                 pendingUserInfo = null
+                Log.d("AppRepository", "New user created successfully")
                 return newUser
             }
 
             // Verify role matches
             if (user.role != role) {
+                Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
                 auth.signOut()
                 throw Exception("Invalid role selected")
             }
 
+            Log.d("AppRepository", "Existing user verified successfully")
             return user
         } catch (e: Exception) {
+            Log.e("AppRepository", "Verification failed: ${e.message}")
             throw Exception("Verification failed: ${e.message ?: "Unknown error"}")
         }
     }

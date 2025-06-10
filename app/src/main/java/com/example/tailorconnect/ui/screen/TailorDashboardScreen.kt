@@ -1,13 +1,23 @@
 package com.example.tailorconnect.ui.screen
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,22 +25,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.tailorconnect.R
 import com.example.tailorconnect.data.model.Measurement
+import com.example.tailorconnect.data.model.MeasurementFields
 import com.example.tailorconnect.data.model.repository.AppRepository
 import com.example.tailorconnect.ui.components.ProfileSection
+import com.example.tailorconnect.utils.PdfGenerator
+import com.example.tailorconnect.utils.CsvGenerator
 import com.example.tailorconnect.viewmodel.ProfileViewModel
 import com.example.tailorconnect.viewmodel.TailorViewModel
 import com.example.tailorconnect.ui.theme.ThemeState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import android.util.Log
 import androidx.compose.foundation.clickable
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.tooling.preview.Preview
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
 import com.itextpdf.layout.Document
@@ -39,6 +57,15 @@ import com.itextpdf.layout.element.Paragraph
 import com.itextpdf.layout.element.Table
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -327,6 +354,45 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                                                 Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                // Display body type image if available
+                                                measurement.bodyTypeImageId?.let { bodyTypeId ->
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier.padding(16.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Text(
+                                                                text = "Body Type",
+                                                                style = MaterialTheme.typography.titleMedium,
+                                                                color = themeState.textColor,
+                                                                modifier = Modifier.padding(bottom = 8.dp)
+                                                            )
+                                                            Image(
+                                                                painter = painterResource(id = when (bodyTypeId) {
+                                                                    1 -> R.drawable.first
+                                                                    2 -> R.drawable.second
+                                                                    3 -> R.drawable.third
+                                                                    4 -> R.drawable.fourth
+                                                                    5 -> R.drawable.five
+                                                                    else -> R.drawable.sixth
+                                                                }),
+                                                                contentDescription = "Body Type $bodyTypeId",
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .height(200.dp)
+                                                                    .padding(8.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                                 
                                                 // Display all measurement fields
                                                 measurement.dimensions.forEach { (key, value) ->

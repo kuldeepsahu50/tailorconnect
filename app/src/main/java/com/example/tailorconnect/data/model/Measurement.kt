@@ -6,6 +6,7 @@ data class Measurement(
     val tailorId: String = "",
     val adminId: String = "",
     val timestamp: Long = System.currentTimeMillis(),
+    val bodyTypeImageId: Int? = null,
     val dimensions: Map<String, String> = mapOf(
         "chest" to "",
         "waist" to "",
@@ -22,6 +23,7 @@ data class Measurement(
         tailorId = "",
         adminId = "",
         timestamp = System.currentTimeMillis(),
+        bodyTypeImageId = null,
         dimensions = mapOf()
     )
 } 

@@ -66,6 +66,15 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.storage.FirebaseStorage
+import java.util.UUID
+import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import com.google.firebase.storage.ktx.storage
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -355,6 +364,28 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                 Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 
+                                                // Display customer image if available
+                                                measurement.customerImageUrl?.let { imageUrl ->
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(200.dp)
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor
+                                                        )
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = ImageRequest.Builder(context)
+                                                                .data(imageUrl)
+                                                                .crossfade(true)
+                                                                .build(),
+                                                            contentDescription = "Customer Photo",
+                                                            modifier = Modifier.fillMaxSize()
+                                                        )
+                                                    }
+                                                }
+                                                
                                                 // Display body type image if available
                                                 measurement.bodyTypeImageId?.let { bodyTypeId ->
                                                     Card(
@@ -412,6 +443,195 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             color = themeState.textColor
                                                         )
+                                                    }
+                                                }
+
+                                                // Display pocket style if available
+                                                if (measurement.dimensions.containsKey("Top Pocket Style") || measurement.dimensions.containsKey("Bottom Pocket Style")) {
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Text(
+                                                        text = "Pocket Style",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = themeState.textColor,
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    )
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier.padding(16.dp)
+                                                        ) {
+                                                            // Display top pocket style for shirts
+                                                            measurement.dimensions["Top Pocket Style"]?.let { pocketStyle ->
+                                                                Text(
+                                                                    text = "Top Pocket Style",
+                                                                    style = MaterialTheme.typography.titleSmall,
+                                                                    color = themeState.textColor,
+                                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                                )
+                                                                Row(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(bottom = 16.dp),
+                                                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                                                ) {
+                                                                    Card(
+                                                                        modifier = Modifier
+                                                                            .weight(1f),
+                                                                        colors = CardDefaults.cardColors(
+                                                                            containerColor = if (pocketStyle == "Single")
+                                                                                themeState.primaryColor.copy(alpha = 0.1f)
+                                                                            else
+                                                                                themeState.surfaceColor
+                                                                        )
+                                                                    ) {
+                                                                        Column(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .padding(16.dp),
+                                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                                        ) {
+                                                                            Image(
+                                                                                painter = painterResource(id = R.drawable.single_pocket),
+                                                                                contentDescription = "Single Pocket",
+                                                                                modifier = Modifier
+                                                                                    .size(80.dp)
+                                                                                    .padding(bottom = 8.dp)
+                                                                            )
+                                                                            Text(
+                                                                                text = "Single Pocket",
+                                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                                color = if (pocketStyle == "Single")
+                                                                                    themeState.primaryColor
+                                                                                else
+                                                                                    themeState.textColor
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                    Card(
+                                                                        modifier = Modifier
+                                                                            .weight(1f),
+                                                                        colors = CardDefaults.cardColors(
+                                                                            containerColor = if (pocketStyle == "Double")
+                                                                                themeState.primaryColor.copy(alpha = 0.1f)
+                                                                            else
+                                                                                themeState.surfaceColor
+                                                                        )
+                                                                    ) {
+                                                                        Column(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .padding(16.dp),
+                                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                                        ) {
+                                                                            Image(
+                                                                                painter = painterResource(id = R.drawable.double_pocket),
+                                                                                contentDescription = "Double Pocket",
+                                                                                modifier = Modifier
+                                                                                    .size(80.dp)
+                                                                                    .padding(bottom = 8.dp)
+                                                                            )
+                                                                            Text(
+                                                                                text = "Double Pocket",
+                                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                                color = if (pocketStyle == "Double")
+                                                                                    themeState.primaryColor
+                                                                                else
+                                                                                    themeState.textColor
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Display bottom pocket style for trousers
+                                                            measurement.dimensions["Bottom Pocket Style"]?.let { pocketStyle ->
+                                                                Text(
+                                                                    text = "Bottom Pocket Style",
+                                                                    style = MaterialTheme.typography.titleSmall,
+                                                                    color = themeState.textColor,
+                                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                                )
+                                                                Row(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(bottom = 16.dp),
+                                                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                                                ) {
+                                                                    Card(
+                                                                        modifier = Modifier
+                                                                            .weight(1f),
+                                                                        colors = CardDefaults.cardColors(
+                                                                            containerColor = if (pocketStyle == "Single")
+                                                                                themeState.primaryColor.copy(alpha = 0.1f)
+                                                                            else
+                                                                                themeState.surfaceColor
+                                                                        )
+                                                                    ) {
+                                                                        Column(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .padding(16.dp),
+                                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                                        ) {
+                                                                            Image(
+                                                                                painter = painterResource(id = R.drawable.single_pocket),
+                                                                                contentDescription = "Single Pocket",
+                                                                                modifier = Modifier
+                                                                                    .size(80.dp)
+                                                                                    .padding(bottom = 8.dp)
+                                                                            )
+                                                                            Text(
+                                                                                text = "Single Pocket",
+                                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                                color = if (pocketStyle == "Single")
+                                                                                    themeState.primaryColor
+                                                                                else
+                                                                                    themeState.textColor
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                    Card(
+                                                                        modifier = Modifier
+                                                                            .weight(1f),
+                                                                        colors = CardDefaults.cardColors(
+                                                                            containerColor = if (pocketStyle == "Double")
+                                                                                themeState.primaryColor.copy(alpha = 0.1f)
+                                                                            else
+                                                                                themeState.surfaceColor
+                                                                        )
+                                                                    ) {
+                                                                        Column(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .padding(16.dp),
+                                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                                        ) {
+                                                                            Image(
+                                                                                painter = painterResource(id = R.drawable.double_pocket),
+                                                                                contentDescription = "Double Pocket",
+                                                                                modifier = Modifier
+                                                                                    .size(80.dp)
+                                                                                    .padding(bottom = 8.dp)
+                                                                            )
+                                                                            Text(
+                                                                                text = "Double Pocket",
+                                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                                color = if (pocketStyle == "Double")
+                                                                                    themeState.primaryColor
+                                                                                else
+                                                                                    themeState.textColor
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
 

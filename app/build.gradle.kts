@@ -55,7 +55,6 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx:20.3.0")
     implementation("com.google.firebase:firebase-auth-ktx:22.3.1")
     implementation("androidx.navigation:navigation-runtime-ktx:2.7.4")
-    implementation("androidx.camera:camera-core:1.3.0")
     
     // PDF Generation
     implementation("com.itextpdf:itext7-core:7.2.5")
@@ -82,4 +81,13 @@ dependencies {
     
     // Required for @Preview annotation
     implementation("androidx.compose.ui:ui-tooling-preview-android")
+
+    implementation("io.coil-kt:coil-compose:2.4.0")
+    
+    // Firebase Storage
+    implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
+    implementation("com.google.firebase:firebase-storage-ktx")
+    
+    // Coil for image loading
+    implementation("io.coil-kt:coil:2.4.0")
 }

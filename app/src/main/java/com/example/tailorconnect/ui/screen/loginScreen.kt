@@ -1,5 +1,6 @@
 package com.example.tailorconnect.ui.screen
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -10,6 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +22,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -26,11 +31,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
 import com.example.tailorconnect.R
 import com.example.tailorconnect.data.model.repository.AppRepository
+import com.example.tailorconnect.ui.theme.ThemeState
 import com.example.tailorconnect.viewmodel.LoginViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 
 @Composable
 fun LoginScreen(navController: NavController, repository: AppRepository) {
@@ -457,6 +468,110 @@ private fun TailorLoginForm(
             } else {
                 Text("Continue")
             }
+        }
+    }
+}
+
+@Composable
+fun CustomerImageCapture(
+    customerImages: List<String>,
+    onImagesChanged: (List<String>) -> Unit,
+    themeState: ThemeState,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text("Upload item image")
+        Row {
+            // Add image button
+            IconButton(onClick = { /* launch camera or gallery picker */ }) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "Add Image")
+            }
+            // Show image thumbnails
+            customerImages.forEachIndexed { index, imageUrl ->
+                Box {
+                    Image(
+                        painter = rememberAsyncImagePainter(imageUrl),
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    IconButton(
+                        onClick = {
+                            val newList = customerImages.toMutableList()
+                            newList.removeAt(index)
+                            onImagesChanged(newList)
+                        },
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove")
+                    }
+                }
+            }
+        }
+        Text("You can upload up to 8 files. Each file shouldn't exceed 3MB.")
+    }
+}
+
+@Composable
+fun AdminDashboardScreen() {
+    val context = LocalContext.current
+    val imageUris = remember { mutableStateListOf<Uri>() }
+    val maxImages = 8
+    val maxFileSizeMB = 3
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        uris?.let {
+            if (imageUris.size + uris.size > maxImages) {
+                errorMessage = "You can upload up to $maxImages images."
+            } else {
+                // Optionally check file size here
+                imageUris.addAll(uris)
+                errorMessage = null
+            }
+        }
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Upload item image")
+        Text("You can upload up to $maxImages files. Each file shouldn't exceed $maxFileSizeMB MB.")
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                enabled = imageUris.size < maxImages
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "Add Image")
+            }
+            LazyRow {
+                items(imageUris) { uri ->
+                    Box {
+                        Image(
+                            painter = rememberAsyncImagePainter(uri),
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp).padding(4.dp)
+                        )
+                        IconButton(
+                            onClick = { imageUris.remove(uri) },
+                            modifier = Modifier.align(Alignment.TopEnd)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove")
+                        }
+                    }
+                }
+            }
+        }
+
+        errorMessage?.let {
+            Text(it, color = Color.Red)
+        }
+
+        Button(
+            onClick = { /* Handle continue */ },
+            enabled = imageUris.isNotEmpty()
+        ) {
+            Text("Continue")
         }
     }
 }

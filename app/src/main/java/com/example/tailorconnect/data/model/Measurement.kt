@@ -7,7 +7,7 @@ data class Measurement(
     val adminId: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val bodyTypeImageId: Int? = null,
-    val customerImageUrl: String? = null,
+    val customerImageUrls: List<String> = emptyList(),
     val dimensions: Map<String, String> = mapOf(
         "chest" to "",
         "waist" to "",
@@ -25,7 +25,7 @@ data class Measurement(
         adminId = "",
         timestamp = System.currentTimeMillis(),
         bodyTypeImageId = null,
-        customerImageUrl = null,
+        customerImageUrls = emptyList(),
         dimensions = mapOf()
     )
 } 

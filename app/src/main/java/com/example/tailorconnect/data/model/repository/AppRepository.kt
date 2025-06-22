@@ -38,6 +38,18 @@ class AppRepository {
 
     fun getStoredVerificationId(): String? = storedVerificationId
 
+    // Add cleanup method to prevent memory leaks
+    fun cleanup() {
+        try {
+            storedVerificationId = null
+            resendToken = null
+            pendingUserInfo = null
+            // Don't sign out here as it might affect other parts of the app
+        } catch (e: Exception) {
+            Log.e("AppRepository", "Error during cleanup: ${e.message}", e)
+        }
+    }
+
     suspend fun createTailor(name: String): User {
         try {
             // Create a new user in Firebase Auth with a random email and password
@@ -67,53 +79,77 @@ class AppRepository {
     }
 
     suspend fun sendVerificationCode(phoneNumber: String, name: String, email: String): String = suspendCoroutine { continuation ->
-        // Store user info for later use
-        pendingUserInfo = mapOf(
-            "name" to name,
-            "email" to email
-        )
+        try {
+            Log.d("AppRepository", "Sending verification code to: $phoneNumber")
+            
+            // Store user info for later use
+            pendingUserInfo = mapOf(
+                "name" to name,
+                "email" to email
+            )
 
-        val options = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber(phoneNumber)
-            .setTimeout(30L, TimeUnit.SECONDS)
-            .setActivity(getActivity())
-            .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                    // Auto-verification completed
-                    try {
-                        // Try to sign in immediately if auto-verification succeeds
-                        auth.signInWithCredential(credential)
-                            .addOnSuccessListener {
-                                storedVerificationId = null
-                                pendingUserInfo = null
-                                continuation.resume("auto_verified")
-                            }
-                            .addOnFailureListener {
-                                continuation.resumeWithException(it)
-                            }
-                    } catch (e: Exception) {
+            // Validate phone number format
+            val formattedPhoneNumber = if (phoneNumber.startsWith("+91")) {
+                phoneNumber
+            } else {
+                "+91$phoneNumber"
+            }
+            
+            Log.d("AppRepository", "Formatted phone number: $formattedPhoneNumber")
+
+            val options = PhoneAuthOptions.newBuilder(auth)
+                .setPhoneNumber(formattedPhoneNumber)
+                .setTimeout(60L, TimeUnit.SECONDS) // Increased timeout for better compatibility
+                .setActivity(getActivity())
+                .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                    override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                        Log.d("AppRepository", "Auto-verification completed")
+                        try {
+                            // Try to sign in immediately if auto-verification succeeds
+                            auth.signInWithCredential(credential)
+                                .addOnSuccessListener {
+                                    Log.d("AppRepository", "Auto-verification sign-in successful")
+                                    storedVerificationId = "auto_verified"
+                                    continuation.resume("auto_verified")
+                                }
+                                .addOnFailureListener { exception ->
+                                    Log.e("AppRepository", "Auto-verification sign-in failed", exception)
+                                    storedVerificationId = null
+                                    pendingUserInfo = null
+                                    continuation.resumeWithException(exception)
+                                }
+                        } catch (e: Exception) {
+                            Log.e("AppRepository", "Auto-verification error", e)
+                            continuation.resumeWithException(e)
+                        }
+                    }
+
+                    override fun onVerificationFailed(e: FirebaseException) {
+                        Log.e("AppRepository", "Verification failed", e)
+                        storedVerificationId = null
+                        pendingUserInfo = null
                         continuation.resumeWithException(e)
                     }
-                }
 
-                override fun onVerificationFailed(e: FirebaseException) {
-                    storedVerificationId = null
-                    pendingUserInfo = null
-                    continuation.resumeWithException(e)
-                }
+                    override fun onCodeSent(
+                        verificationId: String,
+                        token: PhoneAuthProvider.ForceResendingToken
+                    ) {
+                        Log.d("AppRepository", "Verification code sent successfully")
+                        storedVerificationId = verificationId
+                        resendToken = token
+                        continuation.resume(verificationId)
+                    }
+                })
+                .build()
 
-                override fun onCodeSent(
-                    verificationId: String,
-                    token: PhoneAuthProvider.ForceResendingToken
-                ) {
-                    storedVerificationId = verificationId
-                    resendToken = token
-                    continuation.resume(verificationId)
-                }
-            })
-            .build()
-
-        PhoneAuthProvider.verifyPhoneNumber(options)
+            PhoneAuthProvider.verifyPhoneNumber(options)
+        } catch (e: Exception) {
+            Log.e("AppRepository", "Error in sendVerificationCode", e)
+            storedVerificationId = null
+            pendingUserInfo = null
+            continuation.resumeWithException(e)
+        }
     }
 
     suspend fun verifyCode(code: String, role: String): User? {
@@ -121,7 +157,7 @@ class AppRepository {
             Log.d("AppRepository", "Starting verification process for role: $role")
             val verificationId = storedVerificationId ?: throw Exception("Verification ID is missing. Please request a new code.")
             
-            if (code.isBlank()) {
+            if (code.isBlank() && verificationId != "auto_verified") {
                 throw Exception("Verification code cannot be empty")
             }
 
@@ -131,43 +167,50 @@ class AppRepository {
                 val currentUser = auth.currentUser
                 if (currentUser != null) {
                     Log.d("AppRepository", "Current user found: ${currentUser.uid}")
-                    // Check if user exists in database
-                    val userSnapshot = database.child("users")
-                        .child(currentUser.uid)
-                        .get()
-                        .await()
+                    return try {
+                        // Check if user exists in database
+                        val userSnapshot = database.child("users")
+                            .child(currentUser.uid)
+                            .get()
+                            .await()
 
-                    val user = userSnapshot.getValue(User::class.java)
+                        val user = userSnapshot.getValue(User::class.java)
 
-                    if (user == null) {
-                        Log.d("AppRepository", "Creating new user for auto-verified account")
-                        // Create new user if doesn't exist
-                        val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
-                        val newUser = User(
-                            id = currentUser.uid,
-                            role = role,
-                            phone = currentUser.phoneNumber ?: "",
-                            name = userInfo["name"] ?: "",
-                            email = userInfo["email"] ?: "",
-                            username = "",
-                            password = "",
-                            uniqueCode = ""
-                        )
-                        database.child("users").child(currentUser.uid).setValue(newUser).await()
-                        pendingUserInfo = null
-                        Log.d("AppRepository", "New user created successfully")
-                        return newUser
+                        if (user == null) {
+                            Log.d("AppRepository", "Creating new user for auto-verified account")
+                            // Create new user if doesn't exist
+                            val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
+                            val newUser = User(
+                                id = currentUser.uid,
+                                role = role,
+                                phone = currentUser.phoneNumber ?: "",
+                                name = userInfo["name"] ?: "",
+                                email = userInfo["email"] ?: "",
+                                username = "",
+                                password = "",
+                                uniqueCode = ""
+                            )
+                            database.child("users").child(currentUser.uid).setValue(newUser).await()
+                            pendingUserInfo = null
+                            Log.d("AppRepository", "New user created successfully")
+                            newUser
+                        } else {
+                            // Verify role matches
+                            if (user.role != role) {
+                                Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
+                                auth.signOut()
+                                throw Exception("Invalid role selected")
+                            }
+                            Log.d("AppRepository", "Existing user verified successfully")
+                            user
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AppRepository", "Error processing auto-verified user", e)
+                        throw e
                     }
-
-                    // Verify role matches
-                    if (user.role != role) {
-                        Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
-                        auth.signOut()
-                        throw Exception("Invalid role selected")
-                    }
-
-                    Log.d("AppRepository", "Existing user verified successfully")
-                    return user
+                } else {
+                    Log.e("AppRepository", "Auto-verification detected but no current user found")
+                    throw Exception("Auto-verification failed. Please try manual verification.")
                 }
             }
 
@@ -177,45 +220,53 @@ class AppRepository {
             val firebaseUser = authResult.user ?: throw Exception("Authentication failed")
 
             Log.d("AppRepository", "Firebase authentication successful for user: ${firebaseUser.uid}")
-            // Check if user exists in database
-            val userSnapshot = database.child("users")
-                .child(firebaseUser.uid)
-                .get()
-                .await()
+            
+            return try {
+                // Check if user exists in database
+                val userSnapshot = database.child("users")
+                    .child(firebaseUser.uid)
+                    .get()
+                    .await()
 
-            val user = userSnapshot.getValue(User::class.java)
+                val user = userSnapshot.getValue(User::class.java)
 
-            if (user == null) {
-                Log.d("AppRepository", "Creating new user for manually verified account")
-                // Create new user if doesn't exist
-                val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
-                val newUser = User(
-                    id = firebaseUser.uid,
-                    role = role,
-                    phone = firebaseUser.phoneNumber ?: "",
-                    name = userInfo["name"] ?: "",
-                    email = userInfo["email"] ?: "",
-                    username = "",
-                    password = "",
-                    uniqueCode = ""
-                )
-                database.child("users").child(firebaseUser.uid).setValue(newUser).await()
-                pendingUserInfo = null
-                Log.d("AppRepository", "New user created successfully")
-                return newUser
+                if (user == null) {
+                    Log.d("AppRepository", "Creating new user for manually verified account")
+                    // Create new user if doesn't exist
+                    val userInfo = pendingUserInfo ?: throw Exception("User information is missing")
+                    val newUser = User(
+                        id = firebaseUser.uid,
+                        role = role,
+                        phone = firebaseUser.phoneNumber ?: "",
+                        name = userInfo["name"] ?: "",
+                        email = userInfo["email"] ?: "",
+                        username = "",
+                        password = "",
+                        uniqueCode = ""
+                    )
+                    database.child("users").child(firebaseUser.uid).setValue(newUser).await()
+                    pendingUserInfo = null
+                    Log.d("AppRepository", "New user created successfully")
+                    newUser
+                } else {
+                    // Verify role matches
+                    if (user.role != role) {
+                        Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
+                        auth.signOut()
+                        throw Exception("Invalid role selected")
+                    }
+                    Log.d("AppRepository", "Existing user verified successfully")
+                    user
+                }
+            } catch (e: Exception) {
+                Log.e("AppRepository", "Error processing manually verified user", e)
+                throw e
             }
-
-            // Verify role matches
-            if (user.role != role) {
-                Log.e("AppRepository", "Role mismatch: expected $role but got ${user.role}")
-                auth.signOut()
-                throw Exception("Invalid role selected")
-            }
-
-            Log.d("AppRepository", "Existing user verified successfully")
-            return user
         } catch (e: Exception) {
             Log.e("AppRepository", "Verification failed: ${e.message}")
+            // Clean up on error
+            storedVerificationId = null
+            pendingUserInfo = null
             throw Exception("Verification failed: ${e.message ?: "Unknown error"}")
         }
     }
@@ -293,10 +344,49 @@ class AppRepository {
     }
 
     suspend fun getAllMeasurements(): List<Measurement> = suspendCoroutine { continuation ->
+        Log.d("AppRepository", "Getting all measurements")
         database.child("measurements").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val measurements = snapshot.children.mapNotNull { it.getValue(Measurement::class.java) }
-                continuation.resume(measurements)
+                try {
+                    val measurements = mutableListOf<Measurement>()
+                    for (measurementSnapshot in snapshot.children) {
+                        try {
+                            val map = measurementSnapshot.value as? Map<*, *>
+                            if (map != null) {
+                                val customerImageUrlsRaw = map["customerImageUrls"]
+                                val customerImageUrls: List<String> = when (customerImageUrlsRaw) {
+                                    is List<*> -> customerImageUrlsRaw.filterIsInstance<String>()
+                                    is String -> if (customerImageUrlsRaw.isNotEmpty()) listOf(customerImageUrlsRaw) else emptyList()
+                                    else -> emptyList()
+                                }
+                                val dimensionsRaw = map["dimensions"]
+                                val dimensions: Map<String, String> = when (dimensionsRaw) {
+                                    is Map<*, *> -> dimensionsRaw.mapNotNull { (k, v) ->
+                                        if (k is String && v is String) k to v else null
+                                    }.toMap()
+                                    else -> emptyMap()
+                                }
+                                val measurement = Measurement(
+                                    id = map["id"] as? String ?: "",
+                                    customerName = map["customerName"] as? String ?: "",
+                                    tailorId = map["tailorId"] as? String ?: "",
+                                    adminId = map["adminId"] as? String ?: "",
+                                    timestamp = (map["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                                    bodyTypeImageId = (map["bodyTypeImageId"] as? Number)?.toInt(),
+                                    customerImageUrls = customerImageUrls,
+                                    audioFileUrl = map["audioFileUrl"] as? String,
+                                    dimensions = dimensions
+                                )
+                                measurements.add(measurement)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("AppRepository", "Error parsing measurement: ${e.message}")
+                        }
+                    }
+                    continuation.resume(measurements)
+                } catch (e: Exception) {
+                    continuation.resumeWithException(e)
+                }
             }
             override fun onCancelled(error: DatabaseError) {
                 continuation.resumeWithException(error.toException())
@@ -358,19 +448,24 @@ class AppRepository {
         try {
             Log.d("AppRepository", "Adding new measurement for tailor: ${measurement.tailorId}")
             val key = database.child("measurements").push().key ?: throw Exception("Failed to generate key")
-            val newMeasurement = measurement.copy(
+            
+            // Validate and clean data before saving
+            val validatedMeasurement = measurement.copy(
                 id = key,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                customerImageUrls = measurement.customerImageUrls.filter { it.isNotEmpty() },
+                dimensions = measurement.dimensions.filterValues { it.isNotEmpty() }
             )
             
             Log.d("AppRepository", "New measurement details: " +
-                "id=${newMeasurement.id}, " +
-                "customer=${newMeasurement.customerName}, " +
-                "tailorId=${newMeasurement.tailorId}, " +
-                "adminId=${newMeasurement.adminId}")
+                "id=${validatedMeasurement.id}, " +
+                "customer=${validatedMeasurement.customerName}, " +
+                "tailorId=${validatedMeasurement.tailorId}, " +
+                "adminId=${validatedMeasurement.adminId}, " +
+                "imageUrls=${validatedMeasurement.customerImageUrls.size}")
             
-            database.child("measurements").child(key).setValue(newMeasurement).await()
-            Log.d("AppRepository", "Successfully added measurement: ${newMeasurement.id}")
+            database.child("measurements").child(key).setValue(validatedMeasurement).await()
+            Log.d("AppRepository", "Successfully added measurement: ${validatedMeasurement.id}")
         } catch (e: Exception) {
             Log.e("AppRepository", "Error adding measurement", e)
             throw e

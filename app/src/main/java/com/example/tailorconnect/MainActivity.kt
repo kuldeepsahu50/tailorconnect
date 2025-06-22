@@ -120,7 +120,19 @@ fun TailorConnectAppContent(repository: AppRepository) {
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("user_id") ?: ""
             Log.d("TailorConnect", "Navigating to admin_dashboard with userId: $userId")
-            AdminDashboardScreen(repository, userId, navController)
+            
+            // Validate userId before navigating
+            if (userId.isBlank()) {
+                Log.e("TailorConnect", "Invalid userId provided for admin_dashboard")
+                // Navigate back to login if userId is invalid
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    }
+                }
+            } else {
+                AdminDashboardScreen(repository, userId, navController)
+            }
         }
 
         composable(

@@ -8,24 +8,8 @@ data class Measurement(
     val timestamp: Long = System.currentTimeMillis(),
     val bodyTypeImageId: Int? = null,
     val customerImageUrls: List<String> = emptyList(),
-    val dimensions: Map<String, String> = mapOf(
-        "chest" to "",
-        "waist" to "",
-        "hip" to "",
-        "shoulder" to "",
-        "sleeve" to "",
-        "length" to ""
-    )
+    val audioFileUrl: String? = null,
+    val dimensions: Map<String, String> = emptyMap()
 ) {
-    // Empty constructor for Firebase
-    constructor() : this(
-        id = "",
-        customerName = "",
-        tailorId = "",
-        adminId = "",
-        timestamp = System.currentTimeMillis(),
-        bodyTypeImageId = null,
-        customerImageUrls = emptyList(),
-        dimensions = mapOf()
-    )
+    constructor() : this("", "", "", "", System.currentTimeMillis(), null, emptyList(), null, emptyMap())
 } 

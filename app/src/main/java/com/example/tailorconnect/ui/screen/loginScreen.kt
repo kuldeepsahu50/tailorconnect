@@ -171,19 +171,28 @@ fun LoginScreen(navController: NavController, repository: AppRepository) {
                                             try {
                                                 isLoading = true
                                                 errorMessage = ""
+                                                Log.d("LoginScreen", "Sending verification code to: $phoneNumber")
                                                 val result = viewModel.sendVerificationCode(phoneNumber, name, email)
+                                                Log.d("LoginScreen", "Verification code result: $result")
                                                 if (result == "auto_verified") {
                                                     // Auto-verification succeeded, try to verify immediately
+                                                    Log.d("LoginScreen", "Auto-verification succeeded, verifying user")
                                                     val user = viewModel.verifyCode("", selectedRole!!)
                                                     if (user != null) {
+                                                        Log.d("LoginScreen", "Auto-verification successful, navigating to dashboard")
                                                         navController.navigate("admin_dashboard/${user.id}") {
                                                             popUpTo(navController.graph.startDestinationId) { inclusive = true }
                                                         }
+                                                    } else {
+                                                        Log.e("LoginScreen", "Auto-verification failed: user is null")
+                                                        errorMessage = "Auto-verification failed. Please try manual verification."
                                                     }
                                                 } else {
+                                                    Log.d("LoginScreen", "Verification code sent, showing verification form")
                                                     isVerificationSent = true
                                                 }
                                             } catch (e: Exception) {
+                                                Log.e("LoginScreen", "Failed to send verification code", e)
                                                 errorMessage = "Failed to send verification code: ${e.message}"
                                             } finally {
                                                 isLoading = false
@@ -206,6 +215,7 @@ fun LoginScreen(navController: NavController, repository: AppRepository) {
                                             try {
                                                 isLoading = true
                                                 errorMessage = ""
+                                                Log.d("LoginScreen", "Verifying code: $verificationCode")
                                                 val user = viewModel.verifyCode(verificationCode, selectedRole!!)
                                                 if (user != null) {
                                                     Log.d("LoginScreen", "Verification successful for user: ${user.id}")
@@ -217,7 +227,7 @@ fun LoginScreen(navController: NavController, repository: AppRepository) {
                                                     errorMessage = "Invalid verification code"
                                                 }
                                             } catch (e: Exception) {
-                                                Log.e("LoginScreen", "Verification error: ${e.message}")
+                                                Log.e("LoginScreen", "Verification error", e)
                                                 errorMessage = "Verification failed: ${e.message}"
                                             } finally {
                                                 isLoading = false

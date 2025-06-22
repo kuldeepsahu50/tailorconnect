@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -78,6 +80,9 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
+import android.media.MediaPlayer
+import android.content.Context
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -609,6 +614,49 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                     }
                                                 }
 
+                                                // Display audio recording if available
+                                                if (measurement.audioFileUrl != null) {
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Text(
+                                                        text = "Voice Recording",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = themeState.textColor,
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    )
+                                                    
+                                                    var isPlaying by remember { mutableStateOf(false) }
+                                                    
+                                                    Button(
+                                                        onClick = {
+                                                            if (isPlaying) {
+                                                                stopPlaying(context) {
+                                                                    isPlaying = false
+                                                                }
+                                                            } else {
+                                                                playAudio(context, measurement.audioFileUrl!!) {
+                                                                    isPlaying = true
+                                                                }
+                                                            }
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = if (isPlaying) Color.Green else themeState.primaryColor
+                                                        ),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                                            contentDescription = if (isPlaying) "Stop Playing" else "Play Recording",
+                                                            modifier = Modifier.size(20.dp),
+                                                            tint = Color.White
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = if (isPlaying) "Stop Playing" else "Play Voice Recording",
+                                                            color = Color.White
+                                                        )
+                                                    }
+                                                }
+
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 Button(
                                                     onClick = {
@@ -665,4 +713,38 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+// Audio playback functions
+private var mediaPlayer: MediaPlayer? = null
+
+private fun playAudio(context: Context, audioFileUrl: String, onPlay: () -> Unit) {
+    try {
+        mediaPlayer = MediaPlayer().apply {
+            setDataSource(audioFileUrl)
+            prepare()
+            start()
+            setOnCompletionListener {
+                onPlay() // Toggle back to false when playback completes
+            }
+        }
+        onPlay()
+    } catch (e: Exception) {
+        Log.e("AudioPlayback", "Error playing audio: ${e.message}", e)
+    }
+}
+
+private fun stopPlaying(context: Context, onStop: () -> Unit) {
+    try {
+        mediaPlayer?.apply {
+            if (isPlaying) {
+                stop()
+            }
+            release()
+        }
+        mediaPlayer = null
+        onStop()
+    } catch (e: Exception) {
+        Log.e("AudioPlayback", "Error stopping playback: ${e.message}", e)
+    }
 }

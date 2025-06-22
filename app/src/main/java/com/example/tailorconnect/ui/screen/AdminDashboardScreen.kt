@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -80,6 +82,10 @@ import coil.request.ImageRequest
 import com.google.firebase.storage.ktx.storage
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.graphics.Color
+import android.media.MediaPlayer
+import android.content.Context
+import kotlinx.coroutines.withTimeout
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +110,22 @@ fun AdminDashboardScreen(
 
     Log.d("AdminDashboard", "Loading dashboard for adminId: $adminId")
     
+    // Add error state for repository
+    var repositoryError by remember { mutableStateOf<String?>(null) }
+    
+    // Validate repository
+    if (repository == null) {
+        Log.e("AdminDashboard", "Repository is null")
+        Box(modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = "Error: Repository not available",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+        return
+    }
+
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     
@@ -132,6 +154,7 @@ fun AdminDashboardScreen(
     var customerName by remember { mutableStateOf("") }
     var measurements by remember { mutableStateOf(mutableMapOf<String, String>()) }
     var customerImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var audioFileUrl by remember { mutableStateOf<String?>(null) }
     var showDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -147,6 +170,33 @@ fun AdminDashboardScreen(
     val pdfGenerator = remember { PdfGenerator(context) }
     val csvGenerator = remember { CsvGenerator(context) }
     val storage = Firebase.storage
+
+    // Add network connectivity check
+    var isNetworkAvailable by remember { mutableStateOf(true) }
+    
+    LaunchedEffect(Unit) {
+        try {
+            // Check network connectivity
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val network = connectivityManager.activeNetwork
+            val capabilities = connectivityManager.getNetworkCapabilities(network)
+            isNetworkAvailable = capabilities != null && (
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+            )
+            
+            if (!isNetworkAvailable) {
+                Log.w("AdminDashboard", "No network connectivity detected")
+                repositoryError = "No internet connection. Please check your network settings."
+                return@LaunchedEffect
+            }
+            
+            Log.d("AdminDashboard", "Network connectivity: $isNetworkAvailable")
+        } catch (e: Exception) {
+            Log.e("AdminDashboard", "Error checking network connectivity", e)
+            // Continue anyway, let the repository handle network errors
+        }
+    }
 
     // PDF save launcher
     val savePdfLauncher = rememberLauncherForActivityResult(
@@ -192,10 +242,10 @@ fun AdminDashboardScreen(
                                 table.addHeaderCell(headerCell2)
                                 
                                 // Add measurement data with responsive font sizes
-                                measurement.dimensions.forEach { (key, value) ->
-                                    table.addCell(Cell().add(Paragraph(key)
+                                measurement.dimensions?.forEach { (key, value) ->
+                                    table.addCell(Cell().add(Paragraph(key ?: "Unknown")
                                         .setFontSize(if (isTablet) 12f else 10f)))
-                                    table.addCell(Cell().add(Paragraph(value)
+                                    table.addCell(Cell().add(Paragraph(value ?: "")
                                         .setFontSize(if (isTablet) 12f else 10f)))
                                 }
                                 
@@ -242,9 +292,27 @@ fun AdminDashboardScreen(
     // Load measurements
     LaunchedEffect(Unit) {
         try {
-            allMeasurements = repository.getAllMeasurements()
+            Log.d("AdminDashboard", "Loading measurements...")
+            // Add timeout for network operations
+            withTimeout(30000) { // 30 seconds timeout
+                allMeasurements = repository.getAllMeasurements()
+            }
+            Log.d("AdminDashboard", "Loaded ${allMeasurements.size} measurements")
         } catch (e: Exception) {
-            errorMessage = "Failed to load measurements: ${e.message}"
+            Log.e("AdminDashboard", "Failed to load measurements: ${e.message}", e)
+            when {
+                e.message?.contains("network", ignoreCase = true) == true || 
+                e.message?.contains("connection", ignoreCase = true) == true ||
+                e.message?.contains("timeout", ignoreCase = true) == true -> {
+                    repositoryError = "Network connection error. Please check your internet connection."
+                }
+                e.message?.contains("permission", ignoreCase = true) == true -> {
+                    repositoryError = "Permission denied. Please check your Firebase configuration."
+                }
+                else -> {
+                    errorMessage = "Failed to load measurements: ${e.message}"
+                }
+            }
         }
     }
 
@@ -664,6 +732,10 @@ fun AdminDashboardScreen(
                                 onImagesChanged = { newImages ->
                                     customerImages = newImages
                                 },
+                                audioFileUrl = audioFileUrl,
+                                onAudioFileChanged = { newAudioUrl ->
+                                    audioFileUrl = newAudioUrl
+                                },
                                 themeState = themeState,
                                 modifier = Modifier.padding(bottom = 24.dp)
                             )
@@ -731,17 +803,26 @@ fun AdminDashboardScreen(
                                         return@Button
                                     }
 
+                                    // Validate adminId
+                                    if (adminId.isBlank()) {
+                                        errorMessage = "Invalid admin ID"
+                                        return@Button
+                                    }
+
                                     isLoading = true
                                     CoroutineScope(Dispatchers.Main).launch {
                                         try {
+                                            Log.d("MeasurementSubmit", "Starting measurement submission for customer: $customerName")
+                                            
                                             val measurement = Measurement(
                                                 id = "",
-                                                customerName = customerName,
+                                                customerName = customerName.trim(),
                                                 tailorId = "",
                                                 adminId = adminId,
                                                 timestamp = System.currentTimeMillis(),
                                                 bodyTypeImageId = null,
-                                                customerImageUrls = customerImages,
+                                                customerImageUrls = customerImages.filter { it.isNotEmpty() },
+                                                audioFileUrl = audioFileUrl,
                                                 dimensions = measurements.toMutableMap().apply {
                                                     put("Garment Type", selectedGarmentType)
                                                 }
@@ -753,10 +834,19 @@ fun AdminDashboardScreen(
                                                 showDialog = true
                                                 customerName = ""
                                                 customerImages = emptyList()
+                                                audioFileUrl = null
                                                 measurements = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
                                                     .associateWith { "" }
                                                     .toMutableMap()
-                                                allMeasurements = repository.getAllMeasurements()
+                                                
+                                                // Refresh measurements list
+                                                try {
+                                                    allMeasurements = repository.getAllMeasurements()
+                                                    Log.d("MeasurementSubmit", "Refreshed measurements list: ${allMeasurements.size} items")
+                                                } catch (e: Exception) {
+                                                    Log.e("MeasurementSubmit", "Failed to refresh measurements list: ${e.message}", e)
+                                                    // Don't show error to user as the submission was successful
+                                                }
                                             } catch (e: Exception) {
                                                 Log.e("MeasurementSubmit", "Failed to submit measurement", e)
                                                 errorMessage = "Failed to submit measurement: ${e.message}"
@@ -814,8 +904,11 @@ fun AdminDashboardScreen(
                             IconButton(onClick = { 
                                 CoroutineScope(Dispatchers.Main).launch {
                                     try {
+                                        Log.d("AdminDashboard", "Refreshing measurements...")
                                         allMeasurements = repository.getAllMeasurements()
+                                        Log.d("AdminDashboard", "Refreshed measurements: ${allMeasurements.size} items")
                                     } catch (e: Exception) {
+                                        Log.e("AdminDashboard", "Failed to refresh measurements: ${e.message}", e)
                                         errorMessage = "Failed to refresh measurements: ${e.message}"
                                     }
                                 }
@@ -911,7 +1004,7 @@ fun AdminDashboardScreen(
                                                 Divider(color = themeState.secondaryTextColor.copy(alpha = 0.2f))
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 
-                                                measurement.dimensions.forEach { (key, value) ->
+                                                measurement.dimensions?.forEach { (key, value) ->
                                                     Row(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
@@ -919,16 +1012,23 @@ fun AdminDashboardScreen(
                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                     ) {
                                                         Text(
-                                                            text = key,
+                                                            text = key ?: "Unknown",
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             color = themeState.secondaryTextColor
                                                         )
                                                         Text(
-                                                            text = value,
+                                                            text = value ?: "",
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             color = themeState.textColor
                                                         )
                                                     }
+                                                } ?: run {
+                                                    Text(
+                                                        text = "No measurement data available",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = themeState.secondaryTextColor,
+                                                        modifier = Modifier.padding(vertical = 8.dp)
+                                                    )
                                                 }
 
                                                 // Display customer images if available
@@ -962,6 +1062,50 @@ fun AdminDashboardScreen(
                                                                 contentScale = ContentScale.Crop
                                                             )
                                                         }
+                                                    }
+                                                }
+
+                                                // Display audio recording if available
+                                                if (measurement.audioFileUrl != null) {
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Text(
+                                                        text = "Voice Recording",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        color = themeState.textColor,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    )
+                                                    
+                                                    var isPlaying by remember { mutableStateOf(false) }
+                                                    
+                                                    Button(
+                                                        onClick = {
+                                                            if (isPlaying) {
+                                                                stopPlaying(context) {
+                                                                    isPlaying = false
+                                                                }
+                                                            } else {
+                                                                playAudio(context, measurement.audioFileUrl!!) {
+                                                                    isPlaying = true
+                                                                }
+                                                            }
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = if (isPlaying) Color.Green else themeState.primaryColor
+                                                        ),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                                            contentDescription = if (isPlaying) "Stop Playing" else "Play Recording",
+                                                            modifier = Modifier.size(20.dp),
+                                                            tint = Color.White
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = if (isPlaying) "Stop Playing" else "Play Voice Recording",
+                                                            color = Color.White
+                                                        )
                                                     }
                                                 }
 
@@ -1179,6 +1323,37 @@ fun AdminDashboardScreen(
         )
     }
 
+    // Repository Error Dialog
+    if (repositoryError != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                repositoryError = null
+                // Navigate back to login on repository error
+                navController.navigate("login") {
+                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                }
+            },
+            title = { Text("Connection Error", color = themeState.textColor) },
+            text = { 
+                Text(
+                    "There was an error connecting to the database. Please check your internet connection and try again.",
+                    color = themeState.textColor
+                ) 
+            },
+            confirmButton = {
+                TextButton(onClick = { 
+                    repositoryError = null
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    }
+                }) {
+                    Text("Go to Login", color = themeState.primaryColor)
+                }
+            },
+            containerColor = themeState.surfaceColor
+        )
+    }
+
     // Success Dialog
     if (showDialog) {
         AlertDialog(
@@ -1198,4 +1373,65 @@ fun AdminDashboardScreen(
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+// Audio playback functions
+private var mediaPlayer: MediaPlayer? = null
+
+private fun playAudio(context: Context, audioFileUrl: String, onPlay: () -> Unit) {
+    try {
+        // Stop any existing player first
+        mediaPlayer?.apply {
+            if (isPlaying) {
+                stop()
+            }
+            release()
+        }
+        mediaPlayer = null
+        
+        mediaPlayer = MediaPlayer().apply {
+            setDataSource(audioFileUrl)
+            setOnPreparedListener { mp ->
+                try {
+                    mp.start()
+                    onPlay()
+                } catch (e: Exception) {
+                    Log.e("AudioPlayback", "Error starting playback: ${e.message}", e)
+                }
+            }
+            setOnCompletionListener {
+                onPlay() // Toggle back to false when playback completes
+            }
+            setOnErrorListener { mp, what, extra ->
+                Log.e("AudioPlayback", "MediaPlayer error: what=$what, extra=$extra")
+                mp.release()
+                false
+            }
+            prepareAsync() // Use async prepare for network URLs
+        }
+    } catch (e: Exception) {
+        Log.e("AudioPlayback", "Error playing audio: ${e.message}", e)
+        // Clean up on error
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
+}
+
+private fun stopPlaying(context: Context, onStop: () -> Unit) {
+    try {
+        mediaPlayer?.apply {
+            if (isPlaying) {
+                stop()
+            }
+            release()
+        }
+        mediaPlayer = null
+        onStop()
+    } catch (e: Exception) {
+        Log.e("AudioPlayback", "Error stopping playback: ${e.message}", e)
+        // Ensure cleanup even on error
+        mediaPlayer?.release()
+        mediaPlayer = null
+        onStop()
+    }
 }

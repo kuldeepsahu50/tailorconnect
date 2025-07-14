@@ -31,4 +31,8 @@ class AdminViewModel(private val repository: AppRepository) : ViewModel() {
             repository.deleteMeasurement(measurementId)
         }
     }
+
+    suspend fun isCustomerNameUsed(customerName: String): Boolean {
+        return repository.isCustomerNameUsed(customerName)
+    }
 }

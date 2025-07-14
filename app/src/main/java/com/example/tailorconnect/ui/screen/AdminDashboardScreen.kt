@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,6 +79,7 @@ import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import com.google.firebase.storage.ktx.storage
 import com.google.firebase.ktx.Firebase
@@ -86,6 +88,11 @@ import androidx.compose.ui.graphics.Color
 import android.media.MediaPlayer
 import android.content.Context
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.PhotoLibrary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,7 +157,6 @@ fun AdminDashboardScreen(
     
     var selectedTab by remember { mutableStateOf(0) }
     var selectedGender by remember { mutableStateOf("Male") }
-    var selectedGarmentType by remember { mutableStateOf("Shirt") }
     var customerName by remember { mutableStateOf("") }
     var measurements by remember { mutableStateOf(mutableMapOf<String, String>()) }
     var customerImages by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -161,6 +167,7 @@ fun AdminDashboardScreen(
     var expandedGarmentType by remember { mutableStateOf(false) }
     var allMeasurements by remember { mutableStateOf<List<Measurement>>(emptyList()) }
     var selectedMeasurementForPdf by remember { mutableStateOf<Measurement?>(null) }
+    var showExitDialog by remember { mutableStateOf(false) }
 
     val tailorViewModel = remember { TailorViewModel(repository) }
     val tailors by tailorViewModel.tailors.collectAsState()
@@ -170,6 +177,25 @@ fun AdminDashboardScreen(
     val pdfGenerator = remember { PdfGenerator(context) }
     val csvGenerator = remember { CsvGenerator(context) }
     val storage = Firebase.storage
+    
+    // Create optimized image loader with better caching
+    val imageLoader = remember {
+        coil.ImageLoader.Builder(context)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(context)
+                    .maxSizePercent(0.25) // Use 25% of available memory
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.02) // Use 2% of available disk space
+                    .build()
+            }
+            .crossfade(true)
+            .crossfade(300) // 300ms crossfade
+            .build()
+    }
 
     // Add network connectivity check
     var isNetworkAvailable by remember { mutableStateOf(true) }
@@ -298,6 +324,14 @@ fun AdminDashboardScreen(
                 allMeasurements = repository.getAllMeasurements()
             }
             Log.d("AdminDashboard", "Loaded ${allMeasurements.size} measurements")
+            allMeasurements.forEach { measurement ->
+                Log.d("AdminDashboard", "Loaded measurement: id=${measurement.id}, " +
+                    "customer=${measurement.customerName}, " +
+                    "customerImageUrls=${measurement.customerImageUrls.size} images")
+                if (measurement.customerImageUrls.isNotEmpty()) {
+                    Log.d("AdminDashboard", "Customer image URLs for ${measurement.customerName}: ${measurement.customerImageUrls}")
+                }
+            }
         } catch (e: Exception) {
             Log.e("AdminDashboard", "Failed to load measurements: ${e.message}", e)
             when {
@@ -316,18 +350,231 @@ fun AdminDashboardScreen(
         }
     }
 
-    // Update garment types when gender changes
+    // Ensure measurements map is reset when gender changes
     LaunchedEffect(selectedGender) {
-        val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
-        if (garmentTypes.isNotEmpty()) {
-            selectedGarmentType = garmentTypes[0]
+        val fields = if (selectedGender == "Male") {
+            listOf(
+                // Coat
+                "COAT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK",
+                // Shirt
+                "SHIRT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK",
+                // Trouser
+                "TROUSER LENGTH", "WAIST", "HIP", "THIGH", "KNEE", "BOTTOM", "CROTCH HALF", "CROTCH FULL", "IN SEEM LENGTH",
+                // Misc
+                "W.COATLENGTH", "KNEE LENGTH", "NEHRU JACKET LENGTH", "CALF", "CHURIDAR BOTTOM", "JJ SHOULDER", "TROUSER BACK POCKET", "SHIRT POCKET", "BISCEP", "ELBOW",
+                // COMMENT
+                "COMMENT"
+            )
+        } else if (selectedGender == "Female") {
+            listOf(
+                "Shoulder", "Upper bust", "Bust", "Waist", "Upper hip", "Hip", "Dp", "Biscep", "Armhole", "Front cross", "Back cross",
+                "Sleeve length (half)", "Mohri", "Sleeve length 3/4", "Mohri", "Sleeve length full", "Mohri", "Neck front", "Neck back",
+                "Pant Length", "Pant Waist", "Pant Thigh", "Pant Knee", "Pant Calf", "Pant Mohri",
+                "Blouse Length", "Blouse Waist",
+                "Full length", "Calf length", "Knee length", "Thigh length", "Shirt length",
+                "Comments"
+            )
+        } else emptyList()
+        measurements = fields.associateWith { "" }.toMutableMap()
+    }
+
+    // Add section selection for Shirt, Coat, Trouser
+    val measurementSections = listOf("Shirt", "Coat", "Trouser")
+    var selectedSection by remember { mutableStateOf("Shirt") }
+
+    // Show radio buttons for each section
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        measurementSections.forEach { section ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { selectedSection = section }
+            ) {
+                RadioButton(
+                    selected = selectedSection == section,
+                    onClick = { selectedSection = section },
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = themeState.primaryColor,
+                        unselectedColor = themeState.secondaryTextColor
+                    )
+                )
+                Text(section, color = themeState.textColor, modifier = Modifier.padding(start = 4.dp))
+            }
         }
     }
 
-    // Update measurement fields when garment type changes
-    LaunchedEffect(selectedGarmentType) {
-        val fields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
-        measurements = fields.associateWith { "" }.toMutableMap()
+    // Show all measurement fields for Male (from chart) together
+    if (selectedGender == "Male") {
+        val garmentOptions = listOf("Shirt", "Coat", "Trouser", "Misc")
+        var selectedGarment by remember { mutableStateOf("Shirt") }
+
+        // Radio buttons for garment selection
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            garmentOptions.forEach { garment ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { selectedGarment = garment }
+                ) {
+                    RadioButton(
+                        selected = selectedGarment == garment,
+                        onClick = { selectedGarment = garment },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = themeState.primaryColor,
+                            unselectedColor = themeState.secondaryTextColor
+                        )
+                    )
+                    Text(garment, color = themeState.textColor, modifier = Modifier.padding(start = 4.dp))
+                }
+            }
+        }
+
+        // Show only the selected garment's measurement fields
+        val fields = when (selectedGarment) {
+            "Coat" -> listOf(
+                "COAT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK"
+            )
+            "Shirt" -> listOf(
+                "SHIRT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK"
+            )
+            "Trouser" -> listOf(
+                "TROUSER LENGTH", "WAIST", "HIP", "THIGH", "KNEE", "BOTTOM", "CROTCH HALF", "CROTCH FULL", "IN SEEM LENGTH"
+            )
+            "Misc" -> listOf(
+                "W.COATLENGTH", "KNEE LENGTH", "NEHRU JACKET LENGTH", "CALF", "CHURIDAR BOTTOM", "JJ SHOULDER", "TROUSER BACK POCKET", "SHIRT POCKET", "BISCEP", "ELBOW"
+            )
+            else -> emptyList()
+        }
+        Text(
+            text = "$selectedGarment Measurements",
+            style = MaterialTheme.typography.titleMedium,
+            color = themeState.textColor,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        fields.forEach { field ->
+            OutlinedTextField(
+                value = measurements[field] ?: "",
+                onValueChange = { newValue ->
+                    measurements = measurements.toMutableMap().apply { put(field, newValue) }
+                },
+                label = { Text(field, color = themeState.secondaryTextColor) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = themeState.primaryColor,
+                    unfocusedBorderColor = themeState.secondaryTextColor,
+                    focusedLabelColor = themeState.primaryColor,
+                    unfocusedLabelColor = themeState.secondaryTextColor,
+                    cursorColor = themeState.primaryColor,
+                    focusedTextColor = themeState.textColor,
+                    unfocusedTextColor = themeState.textColor
+                )
+            )
+        }
+    }
+
+    // Submit Button
+    Column {
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                if (customerName.isBlank()) {
+                    errorMessage = "Please enter customer name"
+                    return@Button
+                }
+
+                // Validate adminId
+                if (adminId.isBlank()) {
+                    errorMessage = "Invalid admin ID"
+                    return@Button
+                }
+
+                isLoading = true
+                CoroutineScope(Dispatchers.Main).launch {
+                    // Check for unique customer name
+                    val isUsed = repository.isCustomerNameUsed(customerName.trim())
+                    if (isUsed) {
+                        errorMessage = "A measurement for this customer name already exists. Please use a unique name."
+                        isLoading = false
+                        return@launch
+                    }
+                    Log.d("MeasurementSubmit", "Starting measurement submission for customer: $customerName")
+                    Log.d("MeasurementSubmit", "Customer images to save: "+customerImages.size+" images - $customerImages")
+                    val filteredImages = customerImages.filter { it.isNotEmpty() }
+                    Log.d("MeasurementSubmit", "Filtered images: "+filteredImages.size+" images - $filteredImages")
+                    // Remove empty measurement fields before saving
+                    val nonEmptyMeasurements = measurements.filterValues { it.isNotBlank() }.toMutableMap()
+                    // Always include Garment Type if male
+                    if (selectedGender == "Male") {
+                        nonEmptyMeasurements["Garment Type"] = measurements["Garment Type"] ?: ""
+                    }
+                    val measurement = Measurement(
+                        id = "",
+                        customerName = customerName.trim(),
+                        tailorId = "",
+                        adminId = adminId,
+                        timestamp = System.currentTimeMillis(),
+                        bodyTypeImageId = null,
+                        customerImageUrls = filteredImages,
+                        audioFileUrl = audioFileUrl,
+                        dimensions = nonEmptyMeasurements
+                    )
+                    Log.d("MeasurementSubmit", "Created measurement with "+measurement.customerImageUrls.size+" customer images")
+                    Log.d("MeasurementSubmit", "Measurement customerImageUrls: "+measurement.customerImageUrls)
+                    try {
+                        repository.addMeasurement(measurement)
+                        Log.d("MeasurementSubmit", "Measurement submitted successfully with "+measurement.customerImageUrls.size+" images")
+                        showDialog = true
+                        customerName = ""
+                        customerImages = emptyList()
+                        audioFileUrl = null
+                        measurements = MeasurementFields.getMeasurementFields(selectedGender)
+                            .associateWith { "" }
+                            .toMutableMap()
+                        // Refresh measurements list
+                        try {
+                            allMeasurements = repository.getAllMeasurements()
+                            Log.d("MeasurementSubmit", "Refreshed measurements list: "+allMeasurements.size+" items")
+                        } catch (e: Exception) {
+                            Log.e("MeasurementSubmit", "Failed to refresh measurements list: "+e.message, e)
+                            // Don't show error to user as the submission was successful
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MeasurementSubmit", "Failed to submit measurement", e)
+                        errorMessage = "Failed to submit measurement: "+e.message
+                    }
+                    isLoading = false
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = themeState.primaryColor
+            )
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Text(
+                    "Submit",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 
     Surface(
@@ -397,9 +644,22 @@ fun AdminDashboardScreen(
 
                         // Customer Name Section
                         item {
+                            var isDuplicateName by remember { mutableStateOf(false) }
+                            var nameCheckJob by remember { mutableStateOf<Job?>(null) }
                             OutlinedTextField(
                                 value = customerName,
-                                onValueChange = { customerName = it },
+                                onValueChange = { newName ->
+                                    customerName = newName
+                                    isDuplicateName = false
+                                    nameCheckJob?.cancel()
+                                    if (newName.isNotBlank()) {
+                                        nameCheckJob = CoroutineScope(Dispatchers.Main).launch {
+                                            delay(300) // debounce
+                                            val isUsed = repository.isCustomerNameUsed(newName.trim())
+                                            isDuplicateName = isUsed
+                                        }
+                                    }
+                                },
                                 label = { 
                                     Text(
                                         "Customer Name",
@@ -407,6 +667,7 @@ fun AdminDashboardScreen(
                                         fontSize = bodySize
                                     ) 
                                 },
+                                isError = isDuplicateName,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = defaultPadding),
@@ -423,6 +684,14 @@ fun AdminDashboardScreen(
                                     fontSize = bodySize
                                 )
                             )
+                            if (isDuplicateName) {
+                                Text(
+                                    text = "A measurement for this customer name already exists.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+                                )
+                            }
                         }
 
                         // Gender Selection Section
@@ -484,61 +753,8 @@ fun AdminDashboardScreen(
                             }
                         }
 
-                        // Garment Type Section
-                        item {
-                            Text(
-                                text = "Garment Type",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = themeState.textColor,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                        }
-                        item {
-                            val garmentTypes = MeasurementFields.getGarmentTypes(selectedGender)
-                            ExposedDropdownMenuBox(
-                                expanded = expandedGarmentType,
-                                onExpandedChange = { expandedGarmentType = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 24.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = selectedGarmentType,
-                                    onValueChange = { },
-                                    readOnly = true,
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedGarmentType) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor(),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = themeState.primaryColor,
-                                        unfocusedBorderColor = themeState.secondaryTextColor,
-                                        focusedLabelColor = themeState.primaryColor,
-                                        unfocusedLabelColor = themeState.secondaryTextColor,
-                                        cursorColor = themeState.primaryColor,
-                                        focusedTextColor = themeState.textColor,
-                                        unfocusedTextColor = themeState.textColor
-                                    )
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = expandedGarmentType,
-                                    onDismissRequest = { expandedGarmentType = false }
-                                ) {
-                                    garmentTypes.forEach { type ->
-                                        DropdownMenuItem(
-                                            text = { Text(type, color = themeState.textColor) },
-                                            onClick = { 
-                                                selectedGarmentType = type
-                                                expandedGarmentType = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
                         // Pocket Style Section (only for Shirt and Trouser)
-                        if (selectedGarmentType == "Shirt" || selectedGarmentType == "Trouser") {
+                        if (selectedSection == "Shirt" || selectedSection == "Trouser") {
                             item {
                                 Text(
                                     text = "Pocket Style",
@@ -559,8 +775,8 @@ fun AdminDashboardScreen(
                                     Column(
                                         modifier = Modifier.padding(16.dp)
                                     ) {
-                                        // Top Pocket Style for Shirt
-                                        if (selectedGarmentType == "Shirt") {
+                                        // Show Top Pocket Style for Shirt only
+                                        if (selectedSection == "Shirt") {
                                             Text(
                                                 text = "Top Pocket Style",
                                                 style = MaterialTheme.typography.titleSmall,
@@ -639,9 +855,8 @@ fun AdminDashboardScreen(
                                                 }
                                             }
                                         }
-
-                                        // Bottom Pocket Style for Trouser
-                                        if (selectedGarmentType == "Trouser") {
+                                        // Show Bottom Pocket Style for Trouser only
+                                        if (selectedSection == "Trouser") {
                                             Text(
                                                 text = "Bottom Pocket Style",
                                                 style = MaterialTheme.typography.titleSmall,
@@ -726,11 +941,14 @@ fun AdminDashboardScreen(
                         }
 
                         // Customer Images Section
-                        item {
+                        item(key = "customer-image-capture") {
                             CustomerImageCapture(
                                 customerImages = customerImages,
                                 onImagesChanged = { newImages ->
+                                    Log.d("AdminDashboard", "Received ${newImages.size} images from CustomerImageCapture: $newImages")
+                                    Log.d("AdminDashboard", "Previous customerImages: $customerImages")
                                     customerImages = newImages
+                                    Log.d("AdminDashboard", "Updated customerImages to: $customerImages")
                                 },
                                 audioFileUrl = audioFileUrl,
                                 onAudioFileChanged = { newAudioUrl ->
@@ -750,34 +968,225 @@ fun AdminDashboardScreen(
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
-                        val measurementFields = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
-                        items(measurementFields) { field ->
-                            val isOptional = field == "Message" || field == "Comment"
-                            OutlinedTextField(
-                                value = measurements[field] ?: "",
-                                onValueChange = { newValue ->
-                                    measurements = measurements.toMutableMap().apply {
-                                        put(field, newValue)
-                                    }
-                                },
-                                label = { 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = field,
-                                            color = themeState.secondaryTextColor
-                                        )
-                                        if (isOptional) {
-                                            Text(
-                                                text = " (Optional)",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = themeState.secondaryTextColor.copy(alpha = 0.7f)
+                        if (selectedGender == "Male") {
+                            // Garment selection radio buttons
+                            item {
+                                val garmentOptions = listOf("Shirt", "Coat", "Trouser", "Misc")
+                                var selectedGarment by remember { mutableStateOf("Shirt") }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    garmentOptions.forEach { garment ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.clickable { selectedGarment = garment }
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedGarment == garment,
+                                                onClick = { selectedGarment = garment },
+                                                colors = RadioButtonDefaults.colors(
+                                                    selectedColor = themeState.primaryColor,
+                                                    unselectedColor = themeState.secondaryTextColor
+                                                )
                                             )
+                                            Text(garment, color = themeState.textColor, modifier = Modifier.padding(start = 4.dp))
                                         }
                                     }
-                                },
+                                }
+                                // Save selectedGarment to measurements for submission
+                                LaunchedEffect(selectedGarment) {
+                                    measurements = measurements.toMutableMap().apply { put("Garment Type", selectedGarment) }
+                                }
+                            }
+                            // Show only the selected garment's measurement fields
+                            val garment = measurements["Garment Type"] ?: "Shirt"
+                            val fields = when (garment) {
+                                "Coat" -> listOf(
+                                    "COAT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK"
+                                )
+                                "Shirt" -> listOf(
+                                    "SHIRT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK"
+                                )
+                                "Trouser" -> listOf(
+                                    "TROUSER LENGTH", "WAIST", "HIP", "THIGH", "KNEE", "BOTTOM", "CROTCH HALF", "CROTCH FULL", "IN SEEM LENGTH", "__BOTTOM_POCKET_STYLE__"
+                                )
+                                "Misc" -> listOf(
+                                    "W.COATLENGTH", "KNEE LENGTH", "NEHRU JACKET LENGTH", "CALF", "CHURIDAR BOTTOM", "JJ SHOULDER", "TROUSER BACK POCKET", "SHIRT POCKET", "BISCEP", "ELBOW"
+                                )
+                                else -> emptyList()
+                            }
+                            fields.forEach { field ->
+                                if (field == "__BOTTOM_POCKET_STYLE__") {
+                                    item {
+                                        Text(
+                                            text = "Bottom Pocket Style",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = themeState.textColor,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .selectable(
+                                                        selected = measurements["Bottom Pocket Style"] == "Single",
+                                                        onClick = {
+                                                            measurements = measurements.toMutableMap().apply {
+                                                                put("Bottom Pocket Style", "Single")
+                                                            }
+                                                        }
+                                                    )
+                                                    .padding(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = measurements["Bottom Pocket Style"] == "Single",
+                                                    onClick = {
+                                                        measurements = measurements.toMutableMap().apply {
+                                                            put("Bottom Pocket Style", "Single")
+                                                        }
+                                                    },
+                                                    colors = RadioButtonDefaults.colors(
+                                                        selectedColor = themeState.primaryColor,
+                                                        unselectedColor = themeState.secondaryTextColor
+                                                    )
+                                                )
+                                                Text(
+                                                    "Single Pocket",
+                                                    color = themeState.textColor,
+                                                    modifier = Modifier.padding(start = 8.dp)
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .selectable(
+                                                        selected = measurements["Bottom Pocket Style"] == "Double",
+                                                        onClick = {
+                                                            measurements = measurements.toMutableMap().apply {
+                                                                put("Bottom Pocket Style", "Double")
+                                                            }
+                                                        }
+                                                    )
+                                                    .padding(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = measurements["Bottom Pocket Style"] == "Double",
+                                                    onClick = {
+                                                        measurements = measurements.toMutableMap().apply {
+                                                            put("Bottom Pocket Style", "Double")
+                                                        }
+                                                    },
+                                                    colors = RadioButtonDefaults.colors(
+                                                        selectedColor = themeState.primaryColor,
+                                                        unselectedColor = themeState.secondaryTextColor
+                                                    )
+                                                )
+                                                Text(
+                                                    "Double Pocket",
+                                                    color = themeState.textColor,
+                                                    modifier = Modifier.padding(start = 8.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    item {
+                                        OutlinedTextField(
+                                            value = measurements[field] ?: "",
+                                            onValueChange = { newValue ->
+                                                measurements = measurements.toMutableMap().apply { put(field, newValue) }
+                                            },
+                                            label = { Text(field, color = themeState.secondaryTextColor) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = themeState.primaryColor,
+                                                unfocusedBorderColor = themeState.secondaryTextColor,
+                                                focusedLabelColor = themeState.primaryColor,
+                                                unfocusedLabelColor = themeState.secondaryTextColor,
+                                                cursorColor = themeState.primaryColor,
+                                                focusedTextColor = themeState.textColor,
+                                                unfocusedTextColor = themeState.textColor
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            item {
+                                OutlinedTextField(
+                                    value = measurements["Comment"] ?: "",
+                                    onValueChange = { newValue ->
+                                        measurements = measurements.toMutableMap().apply { put("Comment", newValue) }
+                                    },
+                                    label = { Text("Comment", color = themeState.secondaryTextColor) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = themeState.primaryColor,
+                                        unfocusedBorderColor = themeState.secondaryTextColor,
+                                        focusedLabelColor = themeState.primaryColor,
+                                        unfocusedLabelColor = themeState.secondaryTextColor,
+                                        cursorColor = themeState.primaryColor,
+                                        focusedTextColor = themeState.textColor,
+                                        unfocusedTextColor = themeState.textColor
+                                    )
+                                )
+                            }
+                        }
+                        if (selectedGender == "Female") {
+                            val femaleFields = listOf(
+                                "Shoulder", "Upper bust", "Bust", "Waist", "Upper hip", "Hip", "Dp", "Biscep", "Armhole", "Front cross", "Back cross",
+                                "Sleeve length (half)", "Mohri", "Sleeve length 3/4", "Mohri", "Sleeve length full", "Mohri", "Neck front", "Neck back",
+                                // Pant section
+                                "Pant....", "Length", "Waist", "Thigh", "Knee", "Calf", "Mohri",
+                                // Blouse section
+                                "Blouse....", "Length", "Waist",
+                                // Lengths
+                                "Full length", "Calf length", "Knee length", "Thigh length", "Shirt length",
+                                "Comments"
+                            )
+                            var inPantSection = false
+                            var inBlouseSection = false
+                            femaleFields.forEach { field ->
+                                when (field) {
+                                    "Pant...." -> item {
+                                        Text(
+                                            text = "Pant",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = themeState.textColor,
+                                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                                        )
+                                    }
+                                    "Blouse...." -> item {
+                                            Text(
+                                            text = "Blouse",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = themeState.textColor,
+                                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                                        )
+                                    }
+                                    else -> item {
+                                        OutlinedTextField(
+                                            value = measurements[field] ?: "",
+                                            onValueChange = { newValue ->
+                                                measurements = measurements.toMutableMap().apply { put(field, newValue) }
+                                            },
+                                            label = { Text(field, color = themeState.secondaryTextColor) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
+                                                .padding(vertical = 4.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = themeState.primaryColor,
                                     unfocusedBorderColor = themeState.secondaryTextColor,
@@ -786,11 +1195,11 @@ fun AdminDashboardScreen(
                                     cursorColor = themeState.primaryColor,
                                     focusedTextColor = themeState.textColor,
                                     unfocusedTextColor = themeState.textColor
-                                ),
-                                placeholder = if (isOptional) {
-                                    { Text("Enter ${field.lowercase()} (optional)") }
-                                } else null
+                                            )
                             )
+                                    }
+                                }
+                            }
                         }
 
                         // Submit Button
@@ -811,52 +1220,59 @@ fun AdminDashboardScreen(
 
                                     isLoading = true
                                     CoroutineScope(Dispatchers.Main).launch {
+                                        // Check for unique customer name
+                                        val isUsed = repository.isCustomerNameUsed(customerName.trim())
+                                        if (isUsed) {
+                                            errorMessage = "A measurement for this customer name already exists. Please use a unique name."
+                                            isLoading = false
+                                            return@launch
+                                        }
+                                        Log.d("MeasurementSubmit", "Starting measurement submission for customer: $customerName")
+                                        Log.d("MeasurementSubmit", "Customer images to save: "+customerImages.size+" images - $customerImages")
+                                        val filteredImages = customerImages.filter { it.isNotEmpty() }
+                                        Log.d("MeasurementSubmit", "Filtered images: "+filteredImages.size+" images - $filteredImages")
+                                        // Remove empty measurement fields before saving
+                                        val nonEmptyMeasurements = measurements.filterValues { it.isNotBlank() }.toMutableMap()
+                                        // Always include Garment Type if male
+                                        if (selectedGender == "Male") {
+                                            nonEmptyMeasurements["Garment Type"] = measurements["Garment Type"] ?: ""
+                                        }
+                                        val measurement = Measurement(
+                                            id = "",
+                                            customerName = customerName.trim(),
+                                            tailorId = "",
+                                            adminId = adminId,
+                                            timestamp = System.currentTimeMillis(),
+                                            bodyTypeImageId = null,
+                                            customerImageUrls = filteredImages,
+                                            audioFileUrl = audioFileUrl,
+                                            dimensions = nonEmptyMeasurements
+                                        )
+                                        Log.d("MeasurementSubmit", "Created measurement with "+measurement.customerImageUrls.size+" customer images")
+                                        Log.d("MeasurementSubmit", "Measurement customerImageUrls: "+measurement.customerImageUrls)
                                         try {
-                                            Log.d("MeasurementSubmit", "Starting measurement submission for customer: $customerName")
-                                            
-                                            val measurement = Measurement(
-                                                id = "",
-                                                customerName = customerName.trim(),
-                                                tailorId = "",
-                                                adminId = adminId,
-                                                timestamp = System.currentTimeMillis(),
-                                                bodyTypeImageId = null,
-                                                customerImageUrls = customerImages.filter { it.isNotEmpty() },
-                                                audioFileUrl = audioFileUrl,
-                                                dimensions = measurements.toMutableMap().apply {
-                                                    put("Garment Type", selectedGarmentType)
-                                                }
-                                            )
-
+                                            repository.addMeasurement(measurement)
+                                            Log.d("MeasurementSubmit", "Measurement submitted successfully with "+measurement.customerImageUrls.size+" images")
+                                            showDialog = true
+                                            customerName = ""
+                                            customerImages = emptyList()
+                                            audioFileUrl = null
+                                            measurements = MeasurementFields.getMeasurementFields(selectedGender)
+                                                .associateWith { "" }
+                                                .toMutableMap()
+                                            // Refresh measurements list
                                             try {
-                                                repository.addMeasurement(measurement)
-                                                Log.d("MeasurementSubmit", "Measurement submitted successfully")
-                                                showDialog = true
-                                                customerName = ""
-                                                customerImages = emptyList()
-                                                audioFileUrl = null
-                                                measurements = MeasurementFields.getMeasurementFields(selectedGender, selectedGarmentType)
-                                                    .associateWith { "" }
-                                                    .toMutableMap()
-                                                
-                                                // Refresh measurements list
-                                                try {
-                                                    allMeasurements = repository.getAllMeasurements()
-                                                    Log.d("MeasurementSubmit", "Refreshed measurements list: ${allMeasurements.size} items")
-                                                } catch (e: Exception) {
-                                                    Log.e("MeasurementSubmit", "Failed to refresh measurements list: ${e.message}", e)
-                                                    // Don't show error to user as the submission was successful
-                                                }
+                                                allMeasurements = repository.getAllMeasurements()
+                                                Log.d("MeasurementSubmit", "Refreshed measurements list: "+allMeasurements.size+" items")
                                             } catch (e: Exception) {
-                                                Log.e("MeasurementSubmit", "Failed to submit measurement", e)
-                                                errorMessage = "Failed to submit measurement: ${e.message}"
+                                                Log.e("MeasurementSubmit", "Failed to refresh measurements list: "+e.message, e)
+                                                // Don't show error to user as the submission was successful
                                             }
                                         } catch (e: Exception) {
-                                            Log.e("MeasurementSubmit", "Error in submission process", e)
-                                            errorMessage = "Failed to submit measurement: ${e.message}"
-                                        } finally {
-                                            isLoading = false
+                                            Log.e("MeasurementSubmit", "Failed to submit measurement", e)
+                                            errorMessage = "Failed to submit measurement: "+e.message
                                         }
+                                        isLoading = false
                                     }
                                 },
                                 modifier = Modifier
@@ -884,11 +1300,48 @@ fun AdminDashboardScreen(
                 }
                 1 -> {
                     // Measurements List
+                    var searchQuery by remember { mutableStateOf("") }
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp)
                     ) {
+                        // Search Bar
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text("Search by Customer Name") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search Icon",
+                                    tint = themeState.primaryColor
+                                )
+                            },
+                            shape = RoundedCornerShape(32.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = themeState.surfaceColor.copy(alpha = 0.95f),
+                                unfocusedContainerColor = themeState.surfaceColor.copy(alpha = 0.85f),
+                                focusedBorderColor = themeState.primaryColor,
+                                unfocusedBorderColor = themeState.secondaryTextColor,
+                                focusedLabelColor = themeState.primaryColor,
+                                unfocusedLabelColor = themeState.secondaryTextColor,
+                                cursorColor = themeState.primaryColor,
+                                focusedTextColor = themeState.textColor,
+                                unfocusedTextColor = themeState.textColor
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        )
+                        // Filtered list
+                        val filteredMeasurements = if (searchQuery.isBlank()) {
+                            allMeasurements
+                        } else {
+                            allMeasurements.filter {
+                                it.customerName.contains(searchQuery, ignoreCase = true)
+                            }
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -921,7 +1374,7 @@ fun AdminDashboardScreen(
                             }
                         }
 
-                        if (allMeasurements.isEmpty()) {
+                        if (filteredMeasurements.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 Text(
                                     text = "No measurements available",
@@ -935,7 +1388,7 @@ fun AdminDashboardScreen(
                             var showEditDialog by remember { mutableStateOf<Measurement?>(null) }
                             
                             LazyColumn {
-                                items(allMeasurements) { measurement ->
+                                items(filteredMeasurements) { measurement ->
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1035,7 +1488,7 @@ fun AdminDashboardScreen(
                                                 if (measurement.customerImageUrls.isNotEmpty()) {
                                                     Spacer(modifier = Modifier.height(16.dp))
                                                     Text(
-                                                        text = "Customer Images",
+                                                        text = "Customer Images (${measurement.customerImageUrls.size})",
                                                         style = MaterialTheme.typography.titleSmall,
                                                         color = themeState.textColor,
                                                         fontWeight = FontWeight.Bold,
@@ -1049,17 +1502,113 @@ fun AdminDashboardScreen(
                                                             .fillMaxWidth()
                                                             .height(200.dp)
                                                     ) {
-                                                        items(measurement.customerImageUrls) { imageUrl ->
-                                                            AsyncImage(
-                                                                model = ImageRequest.Builder(context)
-                                                                    .data(imageUrl)
-                                                                    .crossfade(true)
-                                                                    .build(),
-                                                                contentDescription = "Customer Image",
+                                                        items(measurement.customerImageUrls, key = { it }) { imageUrl ->
+                                                            var showImagePreview by remember { mutableStateOf(false) }
+                                                            var imageLoadError by remember { mutableStateOf(false) }
+                                                            
+                                                            Card(
                                                                 modifier = Modifier
                                                                     .fillMaxSize()
-                                                                    .clip(RoundedCornerShape(8.dp)),
-                                                                contentScale = ContentScale.Crop
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .clickable { showImagePreview = true },
+                                                                colors = CardDefaults.cardColors(
+                                                                    containerColor = themeState.surfaceColor
+                                                                )
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    AsyncImage(
+                                                                        model = ImageRequest.Builder(context)
+                                                                            .data(imageUrl)
+                                                                            .crossfade(true)
+                                                                            .memoryCacheKey(imageUrl)
+                                                                            .diskCacheKey(imageUrl)
+                                                                            .build(),
+                                                                                contentDescription = "Customer Image",
+                                                                        modifier = Modifier
+                                                                            .fillMaxWidth()
+                                                                            .aspectRatio(1f)
+                                                                            .clip(RoundedCornerShape(12.dp)),
+                                                                        contentScale = ContentScale.Fit,
+                                                                        imageLoader = imageLoader,
+                                                                        onState = { state ->
+                                                                            // You can handle loading/error here if needed
+                                                                        }
+                                                                    )
+                                                                }
+                                                            }
+                                                            
+                                                            // Image preview dialog
+                                                            if (showImagePreview) {
+                                                                AlertDialog(
+                                                                    onDismissRequest = { showImagePreview = false },
+                                                                    confirmButton = {
+                                                                        TextButton(onClick = { showImagePreview = false }) {
+                                                                            Text("Close", color = themeState.primaryColor)
+                                                                        }
+                                                                    },
+                                                                    text = {
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .aspectRatio(1f)
+                                                                                .padding(8.dp),
+                                                                            contentAlignment = Alignment.Center
+                                                                        ) {
+                                                                            AsyncImage(
+                                                                                model = ImageRequest.Builder(context)
+                                                                                    .data(imageUrl)
+                                                                                    .crossfade(true)
+                                                                                    .memoryCacheKey(imageUrl)
+                                                                                    .diskCacheKey(imageUrl)
+                                                                                    .build(),
+                                                                                contentDescription = "Customer Image Preview",
+                                                                                modifier = Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .clip(RoundedCornerShape(12.dp)),
+                                                                                contentScale = ContentScale.Fit,
+                                                                                imageLoader = imageLoader
+                                                                            )
+                                                                        }
+                                                                    },
+                                                                    containerColor = themeState.surfaceColor
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Show message when no images are available
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor.copy(alpha = 0.5f)
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier.padding(16.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PhotoLibrary,
+                                                                contentDescription = "No Images",
+                                                                tint = themeState.secondaryTextColor,
+                                                                modifier = Modifier.size(32.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.height(8.dp))
+                                                            Text(
+                                                                text = "No Customer Images",
+                                                                style = MaterialTheme.typography.titleSmall,
+                                                                color = themeState.secondaryTextColor
+                                                            )
+                                                            Text(
+                                                                text = "No images were captured for this measurement",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = themeState.secondaryTextColor.copy(alpha = 0.7f)
                                                             )
                                                         }
                                                     }
@@ -1363,6 +1912,33 @@ fun AdminDashboardScreen(
             confirmButton = {
                 TextButton(onClick = { showDialog = false }) {
                     Text("OK", color = themeState.primaryColor)
+                }
+            },
+            containerColor = themeState.surfaceColor
+        )
+    }
+
+    BackHandler {
+        when (selectedTab) {
+            2 -> selectedTab = 1
+            1 -> selectedTab = 0
+            0 -> showExitDialog = true
+        }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Exit App", color = themeState.textColor) },
+            text = { Text("Are you sure you want to exit?", color = themeState.textColor) },
+            confirmButton = {
+                TextButton(onClick = { showExitDialog = false; (context as? android.app.Activity)?.finish() }) {
+                    Text("Exit", color = themeState.primaryColor)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Cancel", color = themeState.primaryColor)
                 }
             },
             containerColor = themeState.surfaceColor

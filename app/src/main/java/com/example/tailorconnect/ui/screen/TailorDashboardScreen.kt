@@ -73,6 +73,7 @@ import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
 import com.google.firebase.storage.ktx.storage
 import com.google.firebase.ktx.Firebase
@@ -83,6 +84,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import android.media.MediaPlayer
 import android.content.Context
+import androidx.compose.material.icons.filled.Search
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.PhotoLibrary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -131,6 +136,27 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
     var selectedMeasurementForPdf by remember { mutableStateOf<Measurement?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    var showExitDialog by remember { mutableStateOf(false) }
+    
+    // Create optimized image loader with better caching
+    val imageLoader = remember {
+        coil.ImageLoader.Builder(context)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(context)
+                    .maxSizePercent(0.25) // Use 25% of available memory
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.02) // Use 2% of available disk space
+                    .build()
+            }
+            .crossfade(true)
+            .crossfade(300) // 300ms crossfade
+            .build()
+    }
 
     // PDF save launcher
     val savePdfLauncher = rememberLauncherForActivityResult(
@@ -213,7 +239,11 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
         measurements.forEach { measurement ->
             Log.d("TailorDashboard", "Admin measurement: id=${measurement.id}, " +
                 "customer=${measurement.customerName}, " +
-                "adminId=${measurement.adminId}")
+                "adminId=${measurement.adminId}, " +
+                "customerImageUrls=${measurement.customerImageUrls.size} images")
+            if (measurement.customerImageUrls.isNotEmpty()) {
+                Log.d("TailorDashboard", "Customer image URLs for ${measurement.customerName}: ${measurement.customerImageUrls}")
+            }
         }
     }
 
@@ -225,10 +255,22 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
         Log.d("TailorDashboard", "Error state changed: $error")
     }
 
-    // Load measurements when the screen is first displayed
+    // Load measurements
     LaunchedEffect(Unit) {
-        Log.d("TailorDashboard", "Loading admin measurements")
-        tailorViewModel.loadMeasurements(tailorId)
+        try {
+            Log.d("TailorDashboard", "Loading measurements...")
+            tailorViewModel.loadMeasurements(tailorId)
+            Log.d("TailorDashboard", "Loading measurements initiated")
+        } catch (e: Exception) {
+            Log.e("TailorDashboard", "Error loading measurements: ${e.message}", e)
+        }
+    }
+
+    BackHandler {
+        when (selectedTab) {
+            1 -> selectedTab = 0
+            0 -> showExitDialog = true
+        }
     }
 
     Surface(
@@ -267,6 +309,42 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
             when (selectedTab) {
                 0 -> {
                     Column {
+                        // Search Bar
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text("Search by Customer Name") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search Icon",
+                                    tint = themeState.primaryColor
+                                )
+                            },
+                            shape = RoundedCornerShape(32.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = themeState.surfaceColor.copy(alpha = 0.95f),
+                                unfocusedContainerColor = themeState.surfaceColor.copy(alpha = 0.85f),
+                                focusedBorderColor = themeState.primaryColor,
+                                unfocusedBorderColor = themeState.secondaryTextColor,
+                                focusedLabelColor = themeState.primaryColor,
+                                unfocusedLabelColor = themeState.secondaryTextColor,
+                                cursorColor = themeState.primaryColor,
+                                focusedTextColor = themeState.textColor,
+                                unfocusedTextColor = themeState.textColor
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        )
+                        // Filtered list
+                        val filteredMeasurements = if (searchQuery.isBlank()) {
+                            measurements
+                        } else {
+                            measurements.filter {
+                                it.customerName.contains(searchQuery, ignoreCase = true)
+                            }
+                        }
                         // Add refresh button at the top
                         Row(
                             modifier = Modifier
@@ -307,7 +385,7 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                     modifier = Modifier.padding(16.dp)
                                 )
                             }
-                        } else if (measurements.isEmpty()) {
+                        } else if (filteredMeasurements.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 Column(
                                     modifier = Modifier.padding(16.dp),
@@ -328,7 +406,7 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                             }
                         } else {
                             LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                items(measurements) { measurement ->
+                                items(filteredMeasurements) { measurement ->
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -376,7 +454,7 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                 if (measurement.customerImageUrls.isNotEmpty()) {
                                                     Spacer(modifier = Modifier.height(16.dp))
                                                     Text(
-                                                        text = "Customer Images",
+                                                        text = "Customer Images (${measurement.customerImageUrls.size})",
                                                         style = MaterialTheme.typography.titleMedium,
                                                         color = themeState.textColor,
                                                         modifier = Modifier.padding(bottom = 8.dp)
@@ -390,25 +468,108 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
                                                             .height(200.dp)
                                                             .padding(bottom = 16.dp)
                                                     ) {
-                                                        items(measurement.customerImageUrls) { imageUrl ->
+                                                        items(measurement.customerImageUrls, key = { it }) { imageUrl ->
+                                                            var showImagePreview by remember { mutableStateOf(false) }
                                                             Card(
                                                                 modifier = Modifier
                                                                     .fillMaxSize()
-                                                                    .clip(RoundedCornerShape(8.dp)),
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .clickable { showImagePreview = true },
                                                                 colors = CardDefaults.cardColors(
                                                                     containerColor = themeState.surfaceColor
                                                                 )
                                                             ) {
-                                                                AsyncImage(
-                                                                    model = ImageRequest.Builder(context)
-                                                                        .data(imageUrl)
-                                                                        .crossfade(true)
-                                                                        .build(),
-                                                                    contentDescription = "Customer Photo",
+                                                                Box(
                                                                     modifier = Modifier.fillMaxSize(),
-                                                                    contentScale = ContentScale.Crop
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    AsyncImage(
+                                                                        model = ImageRequest.Builder(context)
+                                                                            .data(imageUrl)
+                                                                            .crossfade(true)
+                                                                            .memoryCacheKey(imageUrl)
+                                                                            .diskCacheKey(imageUrl)
+                                                                            .build(),
+                                                                        contentDescription = "Customer Image",
+                                                                        modifier = Modifier
+                                                                            .fillMaxWidth()
+                                                                            .aspectRatio(1f)
+                                                                            .clip(RoundedCornerShape(12.dp)),
+                                                                        contentScale = ContentScale.Fit,
+                                                                        imageLoader = imageLoader
+                                                                    )
+                                                                }
+                                                            }
+                                                            // Image preview dialog
+                                                            if (showImagePreview) {
+                                                                AlertDialog(
+                                                                    onDismissRequest = { showImagePreview = false },
+                                                                    confirmButton = {
+                                                                        TextButton(onClick = { showImagePreview = false }) {
+                                                                            Text("Close", color = themeState.primaryColor)
+                                                                        }
+                                                                    },
+                                                                    text = {
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .fillMaxWidth()
+                                                                                .aspectRatio(1f)
+                                                                                .padding(8.dp),
+                                                                            contentAlignment = Alignment.Center
+                                                                        ) {
+                                                                            AsyncImage(
+                                                                                model = ImageRequest.Builder(context)
+                                                                                    .data(imageUrl)
+                                                                                    .crossfade(true)
+                                                                                    .memoryCacheKey(imageUrl)
+                                                                                    .diskCacheKey(imageUrl)
+                                                                                    .build(),
+                                                                                contentDescription = "Customer Image Preview",
+                                                                                modifier = Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .clip(RoundedCornerShape(12.dp)),
+                                                                                contentScale = ContentScale.Fit,
+                                                                                imageLoader = imageLoader
+                                                                            )
+                                                                        }
+                                                                    },
+                                                                    containerColor = themeState.surfaceColor
                                                                 )
                                                             }
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Show message when no images are available
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 16.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = themeState.surfaceColor.copy(alpha = 0.5f)
+                                                        )
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier.padding(16.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PhotoLibrary,
+                                                                contentDescription = "No Images",
+                                                                tint = themeState.secondaryTextColor,
+                                                                modifier = Modifier.size(32.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.height(8.dp))
+                                                            Text(
+                                                                text = "No Customer Images",
+                                                                style = MaterialTheme.typography.titleMedium,
+                                                                color = themeState.secondaryTextColor
+                                                            )
+                                                            Text(
+                                                                text = "No images were captured for this measurement",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = themeState.secondaryTextColor.copy(alpha = 0.7f)
+                                                            )
                                                         }
                                                     }
                                                 }
@@ -703,6 +864,25 @@ fun TailorDashboardScreen(repository: AppRepository, tailorId: String, navContro
             confirmButton = {
                 TextButton(onClick = { errorMessage = null }) {
                     Text("OK", color = themeState.primaryColor)
+                }
+            },
+            containerColor = themeState.surfaceColor
+        )
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Exit App", color = themeState.textColor) },
+            text = { Text("Are you sure you want to exit?", color = themeState.textColor) },
+            confirmButton = {
+                TextButton(onClick = { showExitDialog = false; (context as? android.app.Activity)?.finish() }) {
+                    Text("Exit", color = themeState.primaryColor)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Cancel", color = themeState.primaryColor)
                 }
             },
             containerColor = themeState.surfaceColor

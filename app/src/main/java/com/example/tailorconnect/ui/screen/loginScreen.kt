@@ -97,7 +97,7 @@ fun LoginScreen(navController: NavController, repository: AppRepository) {
         ) {
             // Logo and Welcome Text
             Image(
-                painter = painterResource(id = R.drawable.icon),
+                painter = painterResource(id = R.drawable.mainscreenicon),
                 contentDescription = "App Logo",
                 modifier = Modifier
                     .size(120.dp)

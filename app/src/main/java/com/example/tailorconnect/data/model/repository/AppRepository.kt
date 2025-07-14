@@ -359,6 +359,7 @@ class AppRepository {
                                     is String -> if (customerImageUrlsRaw.isNotEmpty()) listOf(customerImageUrlsRaw) else emptyList()
                                     else -> emptyList()
                                 }
+                                Log.d("AppRepository", "Parsed customerImageUrls for ${map["customerName"]}: $customerImageUrls")
                                 val dimensionsRaw = map["dimensions"]
                                 val dimensions: Map<String, String> = when (dimensionsRaw) {
                                     is Map<*, *> -> dimensionsRaw.mapNotNull { (k, v) ->
@@ -463,6 +464,7 @@ class AppRepository {
                 "tailorId=${validatedMeasurement.tailorId}, " +
                 "adminId=${validatedMeasurement.adminId}, " +
                 "imageUrls=${validatedMeasurement.customerImageUrls.size}")
+            Log.d("AppRepository", "Customer image URLs being saved: ${validatedMeasurement.customerImageUrls}")
             
             database.child("measurements").child(key).setValue(validatedMeasurement).await()
             Log.d("AppRepository", "Successfully added measurement: ${validatedMeasurement.id}")
@@ -604,5 +606,10 @@ class AppRepository {
                     continuation.resumeWithException(error.toException())
                 }
             })
+    }
+
+    suspend fun isCustomerNameUsed(customerName: String): Boolean {
+        val allMeasurements = getAllMeasurements()
+        return allMeasurements.any { it.customerName.equals(customerName, ignoreCase = true) }
     }
 } 

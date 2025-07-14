@@ -12,37 +12,27 @@ object MeasurementFields {
         }
     }
 
-    fun getMeasurementFields(gender: String, garmentType: String): List<String> {
+    fun getMeasurementFields(gender: String): List<String> {
         return when (gender) {
-            "Male" -> getMaleMeasurementFields(garmentType)
-            "Female" -> getFemaleMeasurementFields(garmentType)
+            "Male" -> listOf(
+                // COAT
+                "COAT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK",
+                // SHIRT
+                "SHIRT LENGTH", "CHEST", "LOWER CHEST", "STOMACH", "CROSS CHEST", "HIP", "SHOULDER", "SLEEVES", "CROSS BACK", "BACK LENGTH", "NECK",
+                // TROUSER
+                "TROUSER LENGTH", "WAIST", "HIP", "THIGH", "KNEE", "BOTTOM", "CROTCH HALF", "CROTCH FULL", "IN SEEM LENGTH",
+                // Misc
+                "W.COATLENGTH", "KNEE LENGTH", "NEHRU JACKET LENGTH", "CALF", "CHURIDAR BOTTOM", "JJ SHOULDER", "TROUSER BACK POCKET", "SHIRT POCKET", "BISCEP", "ELBOW",
+                // COMMENT
+                "COMMENT"
+            )
             else -> emptyList()
         }
     }
 
-    private fun getMaleMeasurementFields(garmentType: String): List<String> {
-        return when (garmentType) {
-            "Shirt", "T-Shirt" -> listOf(
-                "Top Length", "Chest", "Lower Chest", "Stomach", "Cross Chest", 
-                "Hip", "Shoulder", "Sleeves", "Sleeve Cuff", "Cross Back", 
-                "Back Length", "Neck", "Message", "Comment"
-            )
-            "Trouser" -> listOf(
-                "Bottom Length", "Waist", "Hip", "Thigh", "Knee", "Bottom", 
-                "Crotch Half", "Crotch Full", "Inseam Length", "Message", "Comment"
-            )
-            "Kurta" -> listOf(
-                "Kurta Length", "Chest", "Lower Chest", "Stomach", "Cross Chest", 
-                "Hip", "Shoulder", "Sleeves", "Sleeve Bottom", "Back Length", 
-                "Neck", "Trouser Length", "Waist", "Hip", "Thigh", "Knee", 
-                "Bottom", "Crotch Half", "Crotch Full", "Inseam Length", 
-                "Message", "Comment"
-            )
-            "Coat" -> listOf(
-                "Coat Length", "Chest", "Lower Chest", "Stomach", "Cross Chest", 
-                "Hip", "Shoulder", "Sleeves", "Sleeve Bottom", "Back Length", 
-                "Neck", "Message", "Comment"
-            )
+    fun getMeasurementFields(gender: String, garmentType: String): List<String> {
+        return when (gender) {
+            "Female" -> getFemaleMeasurementFields(garmentType)
             else -> emptyList()
         }
     }

@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.tailorconnect.R
 import com.example.tailorconnect.data.model.Measurement
 import com.example.tailorconnect.data.model.MeasurementFields
 import com.example.tailorconnect.data.model.repository.AppRepository
@@ -697,28 +696,28 @@ fun AdminDashboardScreen(
                         // Gender Selection Section
                         item {
                             Text(
-                                text = "Gender",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "Gender:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
                                 color = themeState.textColor,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
                             )
                         }
                         item {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 24.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    .padding(bottom = 32.dp),
+                                horizontalArrangement = Arrangement.spacedBy(32.dp)
                             ) {
                                 Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .weight(1f)
                                         .selectable(
                                             selected = selectedGender == "Male",
                                             onClick = { selectedGender = "Male" }
                                         )
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(4.dp)
                                 ) {
                                     RadioButton(
                                         selected = selectedGender == "Male",
@@ -728,17 +727,16 @@ fun AdminDashboardScreen(
                                             unselectedColor = themeState.secondaryTextColor
                                         )
                                     )
-                                    Text("Male", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
+                                    Text("Male", color = themeState.textColor, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp))
                                 }
                                 Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .weight(1f)
                                         .selectable(
                                             selected = selectedGender == "Female",
                                             onClick = { selectedGender = "Female" }
                                         )
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(4.dp)
                                 ) {
                                     RadioButton(
                                         selected = selectedGender == "Female",
@@ -748,193 +746,99 @@ fun AdminDashboardScreen(
                                             unselectedColor = themeState.secondaryTextColor
                                         )
                                     )
-                                    Text("Female", color = themeState.textColor, modifier = Modifier.padding(start = 8.dp))
+                                    Text("Female", color = themeState.textColor, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp))
                                 }
                             }
                         }
-
                         // Pocket Style Section (only for Shirt and Trouser)
                         if (selectedSection == "Shirt" || selectedSection == "Trouser") {
                             item {
                                 Text(
-                                    text = "Pocket Style",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    text = "Pockets:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
                                     color = themeState.textColor,
-                                    modifier = Modifier.padding(bottom = 8.dp)
+                                    modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
                                 )
                             }
                             item {
-                                Card(
+                                val pocketKey = if (selectedSection == "Shirt") "Top Pocket Style" else "Bottom Pocket Style"
+                                val pocketValue = measurements[pocketKey] ?: ""
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 24.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = themeState.surfaceColor
-                                    )
+                                        .padding(bottom = 32.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(32.dp)
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .selectable(
+                                                selected = pocketValue == "Single",
+                                                onClick = {
+                                                    measurements = measurements.toMutableMap().apply {
+                                                        if (pocketValue == "Single") {
+                                                            put(pocketKey, "") // Unselect if already selected
+                                                        } else {
+                                                            put(pocketKey, "Single")
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                            .padding(4.dp)
                                     ) {
-                                        // Show Top Pocket Style for Shirt only
-                                        if (selectedSection == "Shirt") {
-                                            Text(
-                                                text = "Top Pocket Style",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = themeState.textColor,
-                                                modifier = Modifier.padding(bottom = 8.dp)
+                                        RadioButton(
+                                            selected = pocketValue == "Single",
+                                            onClick = {
+                                                measurements = measurements.toMutableMap().apply {
+                                                    if (pocketValue == "Single") {
+                                                        put(pocketKey, "") // Unselect if already selected
+                                                    } else {
+                                                        put(pocketKey, "Single")
+                                                    }
+                                                }
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = themeState.primaryColor,
+                                                unselectedColor = themeState.secondaryTextColor
                                             )
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 16.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .selectable(
-                                                            selected = measurements["Top Pocket Style"] == "Single",
-                                                            onClick = {
-                                                                measurements = measurements.toMutableMap().apply {
-                                                                    put("Top Pocket Style", "Single")
-                                                                }
-                                                            }
-                                                        )
-                                                        .padding(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = measurements["Top Pocket Style"] == "Single",
-                                                        onClick = {
-                                                            measurements = measurements.toMutableMap().apply {
-                                                                put("Top Pocket Style", "Single")
-                                                            }
-                                                        },
-                                                        colors = RadioButtonDefaults.colors(
-                                                            selectedColor = themeState.primaryColor,
-                                                            unselectedColor = themeState.secondaryTextColor
-                                                        )
-                                                    )
-                                                    Text(
-                                                        "Single Pocket",
-                                                        color = themeState.textColor,
-                                                        modifier = Modifier.padding(start = 8.dp)
-                                                    )
+                                        )
+                                        Text("Single", color = themeState.textColor, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp))
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .selectable(
+                                                selected = pocketValue == "Double",
+                                                onClick = {
+                                                    measurements = measurements.toMutableMap().apply {
+                                                        if (pocketValue == "Double") {
+                                                            put(pocketKey, "") // Unselect if already selected
+                                                        } else {
+                                                            put(pocketKey, "Double")
+                                                        }
+                                                    }
                                                 }
-                                                Row(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .selectable(
-                                                            selected = measurements["Top Pocket Style"] == "Double",
-                                                            onClick = {
-                                                                measurements = measurements.toMutableMap().apply {
-                                                                    put("Top Pocket Style", "Double")
-                                                                }
-                                                            }
-                                                        )
-                                                        .padding(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = measurements["Top Pocket Style"] == "Double",
-                                                        onClick = {
-                                                            measurements = measurements.toMutableMap().apply {
-                                                                put("Top Pocket Style", "Double")
-                                                            }
-                                                        },
-                                                        colors = RadioButtonDefaults.colors(
-                                                            selectedColor = themeState.primaryColor,
-                                                            unselectedColor = themeState.secondaryTextColor
-                                                        )
-                                                    )
-                                                    Text(
-                                                        "Double Pocket",
-                                                        color = themeState.textColor,
-                                                        modifier = Modifier.padding(start = 8.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        // Show Bottom Pocket Style for Trouser only
-                                        if (selectedSection == "Trouser") {
-                                            Text(
-                                                text = "Bottom Pocket Style",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = themeState.textColor,
-                                                modifier = Modifier.padding(bottom = 8.dp)
                                             )
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 16.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .selectable(
-                                                            selected = measurements["Bottom Pocket Style"] == "Single",
-                                                            onClick = {
-                                                                measurements = measurements.toMutableMap().apply {
-                                                                    put("Bottom Pocket Style", "Single")
-                                                                }
-                                                            }
-                                                        )
-                                                        .padding(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = measurements["Bottom Pocket Style"] == "Single",
-                                                        onClick = {
-                                                            measurements = measurements.toMutableMap().apply {
-                                                                put("Bottom Pocket Style", "Single")
-                                                            }
-                                                        },
-                                                        colors = RadioButtonDefaults.colors(
-                                                            selectedColor = themeState.primaryColor,
-                                                            unselectedColor = themeState.secondaryTextColor
-                                                        )
-                                                    )
-                                                    Text(
-                                                        "Single Pocket",
-                                                        color = themeState.textColor,
-                                                        modifier = Modifier.padding(start = 8.dp)
-                                                    )
+                                            .padding(4.dp)
+                                    ) {
+                                        RadioButton(
+                                            selected = pocketValue == "Double",
+                                            onClick = {
+                                                measurements = measurements.toMutableMap().apply {
+                                                    if (pocketValue == "Double") {
+                                                        put(pocketKey, "") // Unselect if already selected
+                                                    } else {
+                                                        put(pocketKey, "Double")
+                                                    }
                                                 }
-                                                Row(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .selectable(
-                                                            selected = measurements["Bottom Pocket Style"] == "Double",
-                                                            onClick = {
-                                                                measurements = measurements.toMutableMap().apply {
-                                                                    put("Bottom Pocket Style", "Double")
-                                                                }
-                                                            }
-                                                        )
-                                                        .padding(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    RadioButton(
-                                                        selected = measurements["Bottom Pocket Style"] == "Double",
-                                                        onClick = {
-                                                            measurements = measurements.toMutableMap().apply {
-                                                                put("Bottom Pocket Style", "Double")
-                                                            }
-                                                        },
-                                                        colors = RadioButtonDefaults.colors(
-                                                            selectedColor = themeState.primaryColor,
-                                                            unselectedColor = themeState.secondaryTextColor
-                                                        )
-                                                    )
-                                                    Text(
-                                                        "Double Pocket",
-                                                        color = themeState.textColor,
-                                                        modifier = Modifier.padding(start = 8.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = themeState.primaryColor,
+                                                unselectedColor = themeState.secondaryTextColor
+                                            )
+                                        )
+                                        Text("Double", color = themeState.textColor, fontSize = 18.sp, modifier = Modifier.padding(start = 8.dp))
                                     }
                                 }
                             }
